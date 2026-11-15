@@ -8,6 +8,7 @@ async function complete(systemPrompt, userText) {
       completionOptions: { stream: false, temperature: 0.2, maxTokens: 2000 },
       messages: [{ role: 'system', text: systemPrompt }, { role: 'user', text: userText }],
     }),
+    signal: AbortSignal.timeout(25000),
   });
   if (!res.ok) throw new Error(`llm ${res.status}: ${(await res.text()).slice(0, 300)}`);
   const data = await res.json();
