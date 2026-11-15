@@ -23,7 +23,7 @@ function getDriver() {
     driverPromise = d.ready(10000).then(ok => {
       if (!ok) throw new Error('YDB not ready');
       return d;
-    });
+    }).catch(e => { driverPromise = null; throw e; });
   }
   return driverPromise;
 }

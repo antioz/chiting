@@ -4,9 +4,12 @@ const C = require('./lib/config');
 const routes = {}; // a -> async (params, ctx) => obj|Response
 
 async function handler(event) {
-  const p = event.queryStringParams || {};
+  const p = event.queryStringParameters || event.queryStringParams || {};
   const a = p.a || '';
-  const origin = (event.headers || {})['Origin'] || '';
+  const headersRaw = event.headers || {};
+  const headersLow = {};
+  for (const k of Object.keys(headersRaw)) headersLow[k.toLowerCase()] = headersRaw[k];
+  const origin = headersLow['origin'] || '';
   const cors = C.siteOrigins.some(o => origin.startsWith(o)) ? origin : C.siteOrigins[0];
   const headers = { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': cors, 'Access-Control-Allow-Headers': 'Authorization,Content-Type', 'Access-Control-Allow-Methods': '*' };
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };

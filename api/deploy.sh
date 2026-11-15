@@ -9,6 +9,13 @@ set -a
 source ../.env
 set +a
 npm install --omit=dev
+# env chiting-api идёт через --environment A=B,C=D — значения с , или " ломали бы формат: стоп.
+for v in "$YDB_ENDPOINT" "$YDB_DATABASE" "$SECRET" "$YANDEX_GPT_API_KEY" "$YANDEX_GPT_FOLDER_ID" "${YANDEX_GPT_MODEL:-}" "${ADMIN_PASSWORD:-}"; do
+  if [[ "$v" == *,* || "$v" == *'"'* ]]; then
+    echo 'env value contains , or " — not supported by yc --environment' >&2
+    exit 1
+  fi
+done
 rm -f ../chiting-api.zip
 zip -qr ../chiting-api.zip index.js package.json package-lock.json lib schema.yql
 $YC serverless function version create --function-name chiting-api \
