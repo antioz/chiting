@@ -1,7 +1,40 @@
 const { ready } = require('./lib/db');
 const C = require('./lib/config');
+const jwt = require('./lib/jwt');
+const repo = require('./lib/repo');
+const auth = require('./lib/handlers/auth');
+
+// SECRET из env функции; jwt.init при холодном старте (index.js грузится один раз на инстанс).
+jwt.init(process.env.SECRET || C.secret);
 
 const routes = {}; // a -> async (params, ctx) => obj|Response
+
+// Маршруты без авторизации: регистрация, логин, health.
+const PUBLIC = new Set(['register', 'login', 'health']);
+
+routes.register = p => auth.register(p);
+routes.login = p => auth.login(p);
+routes.health = async () => ({ body: { ok: true, rubric_version: C.rubricVersion } });
+
+// Список уровней для ребёнка: правило (kid_formulation), текст, delay_hours и доступность
+// по времени последнего approved-прохода (§6 методологии: проход = правило на текст).
+routes.levels = async (_p, ctx) => {
+  const list = await repo.levels();
+  const out = [];
+  for (const l of list) {
+    const last = await repo.lastApprovedAttempt(ctx.user.id, l.id);
+    const delayMs = Number(l.delay_hours) * 3600 * 1000;
+    const locked = !!last && (Date.now() - Number(last.updated_at)) < delayMs;
+    out.push({
+      id: l.id, rule_code: l.rule_code, rule: l.rule_kid,
+      text_id: l.text_id, text_title: l.text_title, text_author: l.text_author,
+      delay_hours: Number(l.delay_hours),
+      available: !locked,
+      available_at: locked ? Number(last.updated_at) + delayMs : null,
+    });
+  }
+  return { body: { levels: out } };
+};
 
 async function handler(event) {
   const p = event.queryStringParameters || event.queryStringParams || {};
@@ -18,8 +51,24 @@ async function handler(event) {
     const body = event.body ? JSON.parse(event.isBase64Encoded ? Buffer.from(event.body, 'base64').toString() : event.body) : {};
     const fn = routes[a];
     if (!fn) return { statusCode: 404, headers, body: JSON.stringify({ error: 'not_found' }) };
-    const out = await fn({ ...p, ...body }, event);
-    return { statusCode: out.status || 200, headers, body: typeof out.body === 'string' ? out.body : JSON.stringify(out) };
+    // Middleware auth: всё, кроме register/login/health — только по JWT.
+    // ВАЖНО: заголовок Authorization: Bearer перехватывает платформа Yandex Cloud Functions
+    // (пытается валидировать его как IAM-токен и отвечает платформенным 403) — поэтому
+    // токен приложения принимаем в X-Auth-Token, Authorization — запасной вариант.
+    const ctx = { event, user: null };
+    if (!PUBLIC.has(a)) {
+      const bearer = /^Bearer\s+(.+)$/i.exec(headersLow['authorization'] || '');
+      const token = headersLow['x-auth-token'] || (bearer && bearer[1]);
+      const payload = token && jwt.verify(token);
+      if (!payload) return { statusCode: 401, headers, body: JSON.stringify({ error: 'unauthorized' }) };
+      ctx.user = { id: payload.id, role: payload.role };
+      if (a.startsWith('admin') && payload.role !== 'admin') {
+        return { statusCode: 403, headers, body: JSON.stringify({ error: 'forbidden' }) };
+      }
+    }
+    const out = await fn({ ...p, ...body }, ctx);
+    const payload = out && out.body !== undefined ? out.body : out;
+    return { statusCode: out.status || 200, headers, body: typeof payload === 'string' ? payload : JSON.stringify(payload) };
   } catch (e) {
     console.error(e);
     return { statusCode: 500, headers, body: JSON.stringify({ error: 'internal' }) };
