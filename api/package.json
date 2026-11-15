@@ -1,0 +1,14 @@
+{
+  "name": "chiting-api",
+  "version": "0.1.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "node --test test/",
+    "deploy": "bash deploy.sh"
+  },
+  "dependencies": {
+    "@yandex-cloud/nodejs-sdk": "^2.9.3",
+    "ydb-sdk": "^5.11.1"
+  },
+  "engines": { "node": ">=18" }
+}

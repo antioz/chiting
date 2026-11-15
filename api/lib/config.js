@@ -1,0 +1,15 @@
+module.exports = {
+  ydbEndpoint: process.env.YDB_ENDPOINT,
+  ydbDb: process.env.YDB_DATABASE,
+  secret: process.env.SECRET || 'dev-secret-change-me',
+  yandexGptKey: process.env.YANDEX_GPT_API_KEY,
+  yandexGptFolder: process.env.YANDEX_GPT_FOLDER_ID,
+  yandexGptModel: process.env.YANDEX_GPT_MODEL || 'yandexgpt-lite',
+  llmCallsLimit: Number(process.env.LLM_CALLS_LIMIT || 12),
+  splitThreshold: Number(process.env.SPLIT_THRESHOLD || 4),
+  socraticMaxSteps: Number(process.env.SOCRATIC_MAX_STEPS || 4),
+  rubricVersion: 'v3-2026-11-15',
+  tokenPriceRubPer1k: Number(process.env.TOKEN_PRICE || 0.2),
+  adminPassword: process.env.ADMIN_PASSWORD,
+  siteOrigins: ['https://antiosov.github.io', 'http://localhost:8000'],
+};
