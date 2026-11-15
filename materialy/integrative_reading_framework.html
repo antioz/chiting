@@ -1,0 +1,713 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#222222">
+  <meta name="description" content="Интегративная методика чтения сложной литературы: архитектура, 8 операций, 4 режима, командные протоколы и рабочая карта. Автономный HTML-файл.">
+  <title>Интегративное чтение — framework для команды</title>
+  <style>
+    :root {
+      --ink: #222222;
+      --ink-soft: #49515a;
+      --secondary: #66717b;
+      --orange: #e44a00;
+      --orange-light: #fff0e9;
+      --blue: #0083af;
+      --blue-light: #eaf7fb;
+      --purple: #2e1352;
+      --purple-light: #f4effa;
+      --paper: #ffffff;
+      --bg: #f7f8fa;
+      --line: #e4e7eb;
+      --muted: #f1f3f5;
+      --shadow: 0 12px 36px rgba(25,34,46,.06);
+      --radius: 15px;
+      --wide: 1380px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 86px; }
+    body { margin: 0; color: var(--ink); background: var(--bg); font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    a { color: var(--blue); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+    a:hover { color: #006184; }
+    a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid rgba(0,131,175,.5); outline-offset: 3px; }
+    p { margin: 0 0 14px; }
+    h1,h2,h3,h4 { line-height: 1.23; letter-spacing: -.025em; }
+    h1 { font-size: clamp(2.2rem, 4.1vw, 4.2rem); margin: 10px 0 18px; max-width: 850px; }
+    h2 { font-size: clamp(1.65rem, 2.55vw, 2.4rem); margin: 0 0 16px; }
+    h3 { font-size: 1.25rem; margin: 0 0 9px; }
+    h4 { font-size: 1rem; margin: 0 0 8px; }
+    ol, ul { margin: 10px 0 0; padding-left: 23px; }
+    li { margin-bottom: 7px; }
+    small { font-size: .83rem; }
+    .skip { position: absolute; left: 10px; top: -70px; z-index: 100; padding: 8px 14px; color: var(--ink); background: white; }
+    .skip:focus { top: 8px; }
+    .topbar { position: sticky; top: 0; z-index: 50; background: rgba(255,255,255,.97); border-bottom: 1px solid var(--line); backdrop-filter: blur(12px); }
+    .topbar-inner { max-width: var(--wide); margin: auto; min-height: 66px; padding: 10px 27px; display: flex; align-items: center; justify-content: space-between; gap: 15px; }
+    .brand { color: var(--ink); text-decoration: none; display: flex; gap: 12px; align-items: center; font-weight: 750; font-size: .9rem; letter-spacing: -.005em; }
+    .brand-mark { display: inline-grid; place-items: center; width: 37px; height: 37px; border-radius: 9px; background: var(--ink); color: white; font-weight: 700; font-size: 14px; letter-spacing: -.05em; }
+    .brand-sub { font-size: .72rem; font-weight: 500; color: var(--secondary); display: block; line-height: 1.25; margin-top: 3px; }
+    .header-actions { display: flex; align-items: center; gap: 8px; }
+    .btn { border: 1px solid transparent; padding: 10px 16px; border-radius: 10px; font-weight: 650; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; line-height: 1.25; transition: transform .15s, background .15s, border-color .15s; }
+    .btn:hover { transform: translateY(-1px); }
+    .btn-primary { background: var(--orange); color: white; }
+    .btn-primary:hover { background: #c53f00; color: white; }
+    .btn-dark { background: var(--ink); color: white; }
+    .btn-dark:hover { background: #000; color: white; }
+    .btn-light { background: white; color: var(--ink); border-color: var(--line); }
+    .btn-light:hover { color: var(--ink); background: var(--muted); }
+    .btn-ghost { background: transparent; color: white; border-color: rgba(255,255,255,.36); }
+    .btn-ghost:hover { background: rgba(255,255,255,.08); color: white; }
+    .btn-small { padding: 9px 12px; font-size: .83rem; }
+    .shell { max-width: var(--wide); margin: 0 auto; padding: 30px 27px 80px; display: grid; grid-template-columns: 215px minmax(0,1fr); gap: 40px; }
+    .sidenav { position: sticky; top: 90px; height: fit-content; align-self: start; }
+    .nav-label { text-transform: uppercase; font-size: .69rem; letter-spacing: .11em; font-weight: 750; color: var(--secondary); margin: 5px 0 15px 12px; }
+    .sidenav a { display: block; text-decoration: none; padding: 9px 12px; font-size: .87rem; font-weight: 580; color: var(--ink-soft); border-left: 2px solid transparent; border-radius: 0 8px 8px 0; line-height: 1.3; }
+    .sidenav a:hover, .sidenav a:focus-visible { color: var(--orange); background: white; border-left-color: var(--orange); }
+    .nav-note { font-size: .78rem; color: var(--secondary); margin: 30px 0 0 12px; line-height: 1.6; }
+    .main { min-width: 0; }
+    .hero { background: var(--ink); color: white; padding: clamp(30px,4.4vw,65px); border-radius: 20px; overflow: hidden; position: relative; isolation: isolate; }
+    .hero:before { content:""; position:absolute; width:520px; height:520px; right:-190px; top:-210px; background:radial-gradient(circle,rgba(228,74,0,.23),transparent 67%); z-index:-1; pointer-events:none; }
+    .hero:after { content:""; position:absolute; width:400px; height:400px; right:55px; bottom:-300px; background:radial-gradient(circle,rgba(0,131,175,.29),transparent 70%); z-index:-1; pointer-events:none; }
+    .eyebrow { text-transform: uppercase; letter-spacing: .13em; font-size: .69rem; font-weight: 800; color: #e0aa90; margin-bottom: 15px; }
+    .hero h1 { color: white; }
+    .hero .lead { font-size: clamp(1.03rem,1.6vw,1.22rem); line-height: 1.68; color: #d8dde2; max-width: 740px; margin: 0 0 26px; }
+    .hero-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 24px; }
+    .hero-foot { border-top: 1px solid rgba(255,255,255,.14); margin-top: 36px; padding-top: 21px; display: flex; gap: 10px 24px; flex-wrap: wrap; color: #d4dae0; font-size: .83rem; }
+    .hero-foot strong { color: white; font-size: 1.15rem; margin-right: 5px; }
+    .section { padding-top: 74px; }
+    .sec-head { margin-bottom: 28px; }
+    .section-no { font-size: .73rem; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; color: var(--orange); margin-bottom: 11px; }
+    .sec-head .sub { max-width: 860px; color: var(--ink-soft); font-size: 1rem; }
+    .card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper); padding: 23px; box-shadow: var(--shadow); }
+    .panel-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; }
+    .panel-grid .card { box-shadow: none; }
+    .card-top { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
+    .num { background: var(--muted); color: var(--ink); width: 31px; height: 31px; flex: 0 0 31px; display: grid; place-items: center; border-radius: 8px; font-weight: 800; font-size: .82rem; }
+    .contour:nth-child(1) { border-top: 4px solid var(--orange); }
+    .contour:nth-child(2) { border-top: 4px solid var(--blue); }
+    .contour:nth-child(3) { border-top: 4px solid var(--purple); }
+    .contour p { margin-bottom: 0; color: var(--ink-soft); font-size: .9rem; }
+    .contour strong { display: block; margin-top: 12px; font-size: .83rem; }
+    .contour em { font-style: normal; color: var(--secondary); font-size: .84rem; }
+    .flowband { margin-top: 17px; background: #f0f3f7; padding: 15px 18px; border-left: 3px solid var(--blue); border-radius: 0 10px 10px 0; font-size: .89rem; }
+    .outputs { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 7px; margin-top: 21px; }
+    .output { padding: 13px 10px; background: white; border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
+    .output b { color: var(--orange); font-size: .74rem; display: block; margin-bottom: 7px; }
+    .output span { display: block; font-weight: 700; font-size: .81rem; line-height: 1.3; overflow-wrap: break-word; }
+    .output small { display: block; color: var(--secondary); font-size: .72rem; margin-top: 6px; line-height: 1.37; }
+    .callout { border-left: 4px solid var(--blue); background: var(--blue-light); padding: 17px 20px; border-radius: 0 10px 10px 0; margin-top: 22px; color: #213f50; font-size: .91rem; }
+    .callout.orange { background: var(--orange-light); border-left-color: var(--orange); color: #6c361b; }
+    .mode-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 15px; }
+    .mode-card { border-radius: var(--radius); border: 1px solid var(--line); padding: 23px; background: white; display: flex; flex-direction: column; }
+    .mode-card .mode-id { font-size: .7rem; letter-spacing: .11em; color: var(--orange); font-weight: 800; text-transform: uppercase; margin-bottom: 11px; }
+    .mode-card .mode-purpose { color: var(--ink-soft); font-size: .9rem; margin-bottom: 13px; }
+    .mode-card .mode-bottom { border-top: 1px solid var(--line); padding-top: 12px; margin-top: auto; font-size: .86rem; }
+    .mode-card .mode-bottom strong { color: var(--ink); }
+    .step-list { display: grid; gap: 13px; }
+    .step { background: white; border: 1px solid var(--line); border-radius: 15px; padding: 25px 26px; display: grid; grid-template-columns: 60px 1fr; gap: 13px 19px; }
+    .step-index { width: 49px; height: 49px; background: var(--ink); color: white; border-radius: 12px; font-size: 1.1rem; font-weight: 800; display: grid; place-items: center; }
+    .step h3 { font-size: 1.24rem; }
+    .step .definition { color: var(--ink-soft); max-width: 850px; margin-bottom: 17px; }
+    .step-body { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .step-body h4 { margin-bottom: 8px; color: var(--ink); }
+    .step-body ul, .step-body ol { font-size: .88rem; color: var(--ink-soft); margin-top: 0; padding-left: 19px; }
+    .step-body li { margin-bottom: 5px; }
+    .step-output { margin-top: 10px; font-size: .88rem; background: var(--muted); border-radius: 9px; padding: 11px 13px; }
+    .step-output b { color: var(--orange); }
+    .step .test { margin-top: 10px; color: #36536a; font-size: .85rem; }
+    .protocols { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; }
+    .proto { display: flex; flex-direction: column; }
+    .proto .pill { align-self: flex-start; background: var(--muted); color: var(--ink-soft); font-size: .75rem; border-radius: 999px; padding: 4px 10px; margin-bottom: 14px; font-weight: 700; }
+    .proto ol { font-size: .88rem; color: var(--ink-soft); }
+    .proto .result { margin-top: auto; padding-top: 18px; font-size: .85rem; color: var(--ink-soft); }
+    .proto .result b { color: var(--ink); }
+    .team-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 25px; }
+    .role-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+    .role { background: var(--muted); padding: 14px; border-radius: 10px; font-size: .86rem; }
+    .role strong { display: block; margin-bottom: 5px; }
+    .role p { color: var(--ink-soft); font-size: .82rem; line-height: 1.48; margin: 0; }
+    .agenda { list-style: none; padding: 0; margin: 0; }
+    .agenda li { border-bottom: 1px solid var(--line); padding: 10px 0; display: grid; grid-template-columns: 80px 1fr; gap: 12px; font-size: .86rem; margin: 0; }
+    .agenda li:last-child { border-bottom: 0; }
+    .agenda time { font-weight: 750; color: var(--orange); }
+    .artifact-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 13px; }
+    .artifact { padding: 20px; border: 1px solid var(--line); background: white; border-radius: 13px; }
+    .artifact p { color: var(--ink-soft); font-size: .88rem; }
+    .artifact .yield { font-size: .79rem; font-weight: 700; color: var(--blue); margin-bottom: 9px; }
+    .artifact ul { font-size: .84rem; color: var(--ink-soft); }
+    .worksheet { padding: 0; overflow: hidden; }
+    .worksheet-header { padding: 24px 28px; background: var(--ink); color: white; }
+    .worksheet-header h3 { font-size: 1.3rem; color: white; }
+    .worksheet-header p { margin: 0; color: #dbe0e5; font-size: .87rem; }
+    .ws-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 16px 27px; border-bottom: 1px solid var(--line); background: #fcfcfd; }
+    .ws-status { font-size: .79rem; color: var(--secondary); margin-left: auto; }
+    .ws-body { padding: 27px; }
+    .fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 17px; }
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field.full { grid-column: 1 / -1; }
+    .field label { font-weight: 700; font-size: .85rem; }
+    .field .hint { color: var(--secondary); font-size: .76rem; margin: 0; }
+    input[type="text"], input[type="date"], select, textarea { width: 100%; border-radius: 9px; padding: 11px 12px; border: 1px solid #cfd6dc; background: white; color: var(--ink); }
+    textarea { resize: vertical; min-height: 105px; line-height: 1.55; font-size: .88rem; }
+    input::placeholder, textarea::placeholder { color: #86919b; }
+    .ws-subhead { margin: 32px 0 17px; border-top: 1px solid var(--line); padding-top: 23px; }
+    .ws-subhead h4 { font-size: 1.09rem; margin: 0 0 3px; }
+    .ws-subhead p { margin: 0; color: var(--secondary); font-size: .82rem; }
+    .ws-step { margin-bottom: 16px; padding: 17px; border: 1px solid var(--line); border-radius: 11px; background: #fff; }
+    .ws-step-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 12px; }
+    .ws-step-head label { font-weight: 750; font-size: .9rem; }
+    .check { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-soft); cursor: pointer; white-space: nowrap; }
+    .check input { accent-color: var(--blue); width: 17px; height: 17px; margin: 0; }
+    .check span { font-size: .78rem; }
+    .ws-step textarea { min-height: 89px; }
+    .progress-wrap { display: flex; gap: 15px; align-items: center; margin-top: 12px; }
+    .progress { flex: 1; background: #e7ebef; height: 9px; border-radius: 999px; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--orange); border-radius: inherit; width: 0; transition: width .25s; }
+    .progress-label { color: var(--ink-soft); font-size: .82rem; min-width: 105px; text-align: right; }
+    .fine-print { color: var(--secondary); font-size: .77rem; margin-top: 17px; }
+    .criteria { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; counter-reset: criterion; }
+    .criterion { display: flex; align-items: flex-start; gap: 12px; padding: 15px; border: 1px solid var(--line); background: white; border-radius: 11px; }
+    .criterion:before { counter-increment: criterion; content: counter(criterion); background: var(--orange-light); color: var(--orange); display: grid; place-items: center; font-size: .83rem; font-weight: 800; min-width: 27px; height: 27px; border-radius: 8px; }
+    .criterion strong { display: block; margin-bottom: 3px; font-size: .88rem; }
+    .criterion p { font-size: .83rem; line-height: 1.45; color: var(--ink-soft); margin: 0; }
+    .references { border: 1px solid var(--line); background: white; border-radius: 12px; padding: 22px 25px; }
+    .references ol { font-size: .86rem; color: var(--ink-soft); }
+    .references li { padding-left: 2px; margin-bottom: 11px; }
+    .foot { margin-top: 68px; border-top: 1px solid var(--line); padding-top: 23px; font-size: .79rem; color: var(--secondary); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 14px; }
+    .inline-link { text-decoration: underline; cursor: pointer; }
+    .noscript { padding: 13px; background: var(--orange-light); border: 1px solid #ffd5c0; color: #7c3816; border-radius: 9px; margin-top: 12px; }
+    .screen-only {} .print-only { display: none; }
+    @media (max-width: 1120px) {
+      .shell { grid-template-columns: 170px minmax(0,1fr); gap: 22px; padding: 24px 17px 65px; }
+      .topbar-inner { padding: 10px 17px; }
+      .outputs { grid-template-columns: repeat(4,minmax(0,1fr)); }
+    }
+    @media (max-width: 900px) {
+      .shell { display: block; max-width: 850px; }
+      .sidenav { display: flex; gap: 5px; white-space: nowrap; overflow-x: auto; position: static; padding: 0 0 15px; margin: 0 0 12px; }
+      .sidenav a { flex-shrink: 0; border: 1px solid var(--line); border-radius: 999px; background: white; padding: 8px 12px; }
+      .sidenav a:hover { border-color: var(--orange); }
+      .nav-label,.nav-note { display: none; }
+      .section { padding-top: 60px; }
+    }
+    @media (max-width: 640px) {
+      body { font-size: 15px; }
+      .topbar-inner { min-height: 58px; }
+      .brand-sub { display: none; }
+      .brand { font-size: .78rem; }
+      .header-actions .btn-light { display: none; }
+      .hero { border-radius: 14px; padding: 29px 22px; }
+      .hero-foot { gap: 10px 18px; }
+      .shell { padding: 13px 13px 48px; }
+      .panel-grid, .mode-grid, .protocols, .team-card, .artifact-list, .criteria, .fields { grid-template-columns: 1fr; }
+      .outputs { grid-template-columns: repeat(2,minmax(0,1fr)); }
+      .step { padding: 18px; grid-template-columns: 1fr; gap: 12px; }
+      .step-index { width: 42px; height: 42px; }
+      .step-body { grid-template-columns: 1fr; }
+      .card { padding: 17px; }
+      .role-grid { grid-template-columns: 1fr 1fr; }
+      .ws-actions, .ws-body { padding: 16px; }
+      .ws-status { width: 100%; margin: 0; }
+      .ws-step { padding: 13px; }
+      .ws-step-head { align-items: flex-start; }
+      .field.full { grid-column: auto; }
+    }
+    @media (max-width: 375px) {
+      .role-grid { grid-template-columns: 1fr; }
+      .brand-mark { display: none; }
+      .header-actions .btn { padding: 8px 10px; }
+      .ws-step-head { display: block; }
+      .ws-step-head .check { margin-top: 7px; }
+    }
+    @media print {
+      @page { size: A4; margin: 15mm 15mm 18mm; }
+      :root { --bg: white; }
+      html { scroll-behavior: auto; }
+      body { background: white; color: black; font-size: 10.5pt; line-height: 1.45; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      .topbar, .sidenav, .screen-only, .ws-actions, .ws-body, .foot .print-hide, .hero-actions { display: none !important; }
+      .shell { max-width: none; display: block; padding: 0; }
+      .hero { border-radius: 0; padding: 22px; }
+      .hero h1 { font-size: 26pt; }
+      h2 { font-size: 19pt; }
+      h3 { font-size: 12.5pt; }
+      .section { padding-top: 25px; break-before: auto; }
+      .step, .mode-card, .card, .artifact, .criterion, .contour, .role { box-shadow: none; break-inside: avoid; }
+      .step { padding: 12px; }
+      .step-body { gap: 8px; }
+      .step-body ul { font-size: 9pt; }
+      .panel-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
+      .outputs { grid-template-columns: repeat(7,minmax(0,1fr)); }
+      .protocols { grid-template-columns: repeat(3,minmax(0,1fr)); }
+      .team-card { grid-template-columns: 1fr 1fr; }
+      .worksheet { break-before: page; }
+      .worksheet-header { padding: 14px 17px; }
+      .print-only { display: block !important; }
+      .print-record { background: white; padding: 15px 18px; }
+      .print-record-item { padding: 7px 0; border-bottom: 1px solid #ccc; break-inside: avoid; }
+      .print-record-item b { display:block; margin-bottom:3px; font-size:10pt; }
+      .print-record-item p { margin: 0; white-space: pre-wrap; font-size:9.5pt; }
+      .foot { margin-top: 25px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .btn, .progress-fill { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main">Перейти к содержанию</a>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="#top" aria-label="К началу framework">
+        <span class="brand-mark" aria-hidden="true">ИЧ</span>
+        <span>Интегративное чтение<span class="brand-sub">Framework для исследовательской и управленческой команды</span></span>
+      </a>
+      <div class="header-actions">
+        <button class="btn btn-light btn-small" type="button" onclick="window.print()">Печать / PDF</button>
+        <a class="btn btn-primary btn-small" href="#worksheet">Рабочая карта</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="shell" id="top">
+    <nav class="sidenav" aria-label="Навигация по framework">
+      <div class="nav-label">Содержание</div>
+      <a href="#overview">01. Архитектура</a>
+      <a href="#modes">02. Режимы чтения</a>
+      <a href="#algorithm">03. Восемь операций</a>
+      <a href="#protocols">04. Протоколы</a>
+      <a href="#team">05. Работа группы</a>
+      <a href="#artifacts">06. Артефакты</a>
+      <a href="#worksheet">07. Рабочая карта</a>
+      <a href="#quality">08. Критерии качества</a>
+      <a href="#sources">09. Основания</a>
+      <div class="nav-note">Файл работает без интернета. Данные рабочей карты сохраняются только в текущем браузере, а не передаются на сервер.</div>
+    </nav>
+
+    <main class="main" id="main">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="eyebrow">Версия 1.0 · Методологический framework</div>
+        <h1 id="hero-title">От сложного текста — к собственному знанию</h1>
+        <p class="lead">Единая методика для индивидуального и коллективного чтения философской, научной и методологической литературы. Цель — не просто прочитать и запомнить, а понять авторскую конструкцию, проверить её, встроить в собственную систему мышления и произвести интеллектуальный результат.</p>
+        <div class="hero-actions screen-only">
+          <a href="#algorithm" class="btn btn-primary">Изучить 8 операций</a>
+          <a href="#worksheet" class="btn btn-ghost">Начать работу с книгой</a>
+        </div>
+        <div class="hero-foot" aria-label="Ключевые элементы методики">
+          <span><strong>3</strong> контура работы</span>
+          <span><strong>4</strong> режима чтения</span>
+          <span><strong>8</strong> операций</span>
+          <span><strong>4</strong> артефакта</span>
+          <span><strong>1</strong> интеллектуальный продукт</span>
+        </div>
+      </section>
+
+      <section class="section" id="overview" aria-labelledby="overview-title">
+        <div class="sec-head">
+          <div class="section-no">01 / Архитектура</div>
+          <h2 id="overview-title">Три контура интегративного чтения</h2>
+          <p class="sub">Читатель работает одновременно с произведением, знанием о предмете и собственным мышлением. Эти контуры связаны, но не сводятся друг к другу.</p>
+        </div>
+        <div class="panel-grid">
+          <article class="card contour">
+            <div class="card-top"><span class="num">01</span><h3>Произведение</h3></div>
+            <p>Восстановить, что утверждает автор, как устроена его концепция, каковы основания и логика аргументации.</p>
+            <strong>Объект</strong><em>Текст и авторская интеллектуальная конструкция.</em>
+            <strong>Результат</strong><em>Корректная реконструкция мысли автора.</em>
+          </article>
+          <article class="card contour">
+            <div class="card-top"><span class="num">02</span><h3>Знание</h3></div>
+            <p>Сопоставить концепцию с альтернативами, проверить основания и сформировать более целостную картину предмета.</p>
+            <strong>Объект</strong><em>Система знаний, гипотез и доказательств.</em>
+            <strong>Результат</strong><em>Обоснованная интегративная модель предмета.</em>
+          </article>
+          <article class="card contour">
+            <div class="card-top"><span class="num">03</span><h3>Читатель</h3></div>
+            <p>Освоить новые понятия, способы мышления, интеллектуальные операции и возможности практического действия.</p>
+            <strong>Объект</strong><em>Собственная когнитивная система.</em>
+            <strong>Результат</strong><em>Изменение понимания и способов деятельности.</em>
+          </article>
+        </div>
+        <div class="flowband"><b>Три ожидаемых эффекта:</b> понимание произведения; развитие читателя; производство знания. Если достигнут только первый эффект, чтение ещё может быть полезным, но исследовательский цикл не завершён.</div>
+        <h3 style="margin:31px 0 11px">Семь возможных результатов чтения</h3>
+        <div class="outputs" aria-label="Семь результатов чтения">
+          <div class="output"><b>01</b><span>Ориентация</span><small>Понять, стоит ли углубляться</small></div>
+          <div class="output"><b>02</b><span>Информирование</span><small>Извлечь необходимые сведения</small></div>
+          <div class="output"><b>03</b><span>Понимание</span><small>Восстановить мысль автора</small></div>
+          <div class="output"><b>04</b><span>Освоение</span><small>Сделать знание своим инструментом</small></div>
+          <div class="output"><b>05</b><span>Критика</span><small>Проверить основания и границы</small></div>
+          <div class="output"><b>06</b><span>Синтез</span><small>Сопоставить разные концепции</small></div>
+          <div class="output"><b>07</b><span>Порождение</span><small>Создать новое знание или решение</small></div>
+        </div>
+        <div class="callout">Это не обязательные семь последовательных ступеней. Цель чтения выбирается заранее, а способы работы — в соответствии с ней. Исследователь может работать с одной главой, если именно она нужна для решения задачи.</div>
+      </section>
+
+      <section class="section" id="modes" aria-labelledby="modes-title">
+        <div class="sec-head">
+          <div class="section-no">02 / Управляемая глубина</div>
+          <h2 id="modes-title">Четыре режима чтения</h2>
+          <p class="sub">Не существует единой оптимальной скорости и глубины чтения. Выбор режима зависит от вопроса, сложности текста, цены ошибки и ожидаемого продукта.</p>
+        </div>
+        <div class="mode-grid">
+          <article class="mode-card">
+            <div class="mode-id">Режим 01</div><h3>Ориентировочный</h3>
+            <p class="mode-purpose">Выяснить, о чём работа, как она организована и нужна ли дальнейшая проработка.</p>
+            <ul><li>Оглавление, введение и заключение.</li><li>Предмет, проблема, тезис, основные понятия.</li><li>Выбор частей для следующего прохода.</li></ul>
+            <div class="mode-bottom"><strong>Продукт:</strong> краткий паспорт произведения и решение о дальнейшем чтении.</div>
+          </article>
+          <article class="mode-card">
+            <div class="mode-id">Режим 02</div><h3>Поисково-избирательный</h3>
+            <p class="mode-purpose">Найти обоснованный ответ на заранее сформулированный вопрос.</p>
+            <ul><li>Поиск релевантных разделов и понятий.</li><li>Чтение фрагментов с учётом контекста.</li><li>Фиксация положения, страницы и ограничений.</li></ul>
+            <div class="mode-bottom"><strong>Продукт:</strong> тематическая подборка аргументированных положений.</div>
+          </article>
+          <article class="mode-card">
+            <div class="mode-id">Режим 03</div><h3>Аналитический</h3>
+            <p class="mode-purpose">Реконструировать целостную авторскую концепцию и глубоко её понять.</p>
+            <ul><li>Работа с понятиями и аргументами.</li><li>Многократное обращение к трудным фрагментам.</li><li>Самообъяснение и сверка с оригиналом.</li></ul>
+            <div class="mode-bottom"><strong>Продукт:</strong> карта интеллектуальной конструкции автора.</div>
+          </article>
+          <article class="mode-card">
+            <div class="mode-id">Режим 04</div><h3>Исследовательско-синтетический</h3>
+            <p class="mode-purpose">Превратить корпус произведений в основание собственного исследования.</p>
+            <ul><li>Сравнение источников по общим вопросам.</li><li>Критика оснований и поиск противоречий.</li><li>Формирование концепций и гипотез.</li></ul>
+            <div class="mode-bottom"><strong>Продукт:</strong> новая модель, исследовательская программа или решение.</div>
+          </article>
+        </div>
+        <div class="callout orange"><b>Правило выбора:</b> не нужно подвергать аналитической проработке весь массив прочитанного. Сначала отберите тексты и вопросы, где глубина действительно создаёт ценность.</div>
+      </section>
+
+      <section class="section" id="algorithm" aria-labelledby="algorithm-title">
+        <div class="sec-head">
+          <div class="section-no">03 / Рабочее ядро</div>
+          <h2 id="algorithm-title">Восемь операций интегративного чтения</h2>
+          <p class="sub">Каждая операция имеет цель, проверяемый результат и условие перехода к следующей. Переходы могут быть обратными: обнаруженное противоречие нередко требует перечитать исходный фрагмент.</p>
+        </div>
+        <div class="step-list">
+          <article class="step" id="step-1"><div class="step-index">01</div><div>
+            <h3>Поставить интеллектуальную задачу</h3>
+            <p class="definition">Превратить намерение «прочитать книгу» в конкретный запрос на знание, понимание или решение.</p>
+            <div class="step-body"><div><h4>Что делаем</h4><ul><li>Формулируем исследуемую проблему.</li><li>Фиксируем неизвестное и имеющиеся гипотезы.</li><li>Определяем, почему нужен именно этот автор.</li><li>Назначаем ожидаемый интеллектуальный продукт.</li></ul></div><div><h4>Контрольные вопросы</h4><ul><li>На какой вопрос я ищу ответ?</li><li>Какие решения зависят от результата?</li><li>Что изменится после успешного чтения?</li></ul></div></div>
+            <div class="step-output"><b>Артефакт:</b> заказ на чтение, вопрос и критерии успешного результата.</div>
+            <div class="test"><b>Проверка:</b> задача сформулирована без глагола «прочитать» как единственного результата.</div>
+          </div></article>
+          <article class="step" id="step-2"><div class="step-index">02</div><div>
+            <h3>Провести разведку произведения</h3>
+            <p class="definition">Получить карту текста до его детального изучения и определить природу авторского знания.</p>
+            <div class="step-body"><div><h4>Что делаем</h4><ul><li>Изучаем автора, эпоху, научный контекст.</li><li>Просматриваем композицию, введение и выводы.</li><li>Выявляем предмет и центральные понятия.</li><li>Определяем тип текста и требуемую глубину.</li></ul></div><div><h4>Контрольные вопросы</h4><ul><li>Что это: исследование, теория, философия или метод?</li><li>Что автор пытается объяснить или изменить?</li><li>Какие главы нужны для моей задачи?</li></ul></div></div>
+            <div class="step-output"><b>Артефакт:</b> паспорт произведения и предварительная карта разделов.</div>
+            <div class="test"><b>Проверка:</b> можно в двух-трёх предложениях объяснить предмет и замысел книги.</div>
+          </div></article>
+          <article class="step" id="step-3"><div class="step-index">03</div><div>
+            <h3>Реконструировать интеллектуальную архитектуру</h3>
+            <p class="definition">Восстановить не последовательность абзацев, а систему, которую построил автор.</p>
+            <div class="step-body"><div><h4>Что делаем</h4><ul><li>Выделяем предмет, проблему и авторский замысел.</li><li>Определяем основания и единицу анализа.</li><li>Собираем словарь ключевых понятий.</li><li>Строим карту тезисов, аргументов и выводов.</li></ul></div><div><h4>Контрольные вопросы</h4><ul><li>Какова логика создания авторской концепции?</li><li>Что автор принимает как исходную предпосылку?</li><li>Какие положения поддерживают основные выводы?</li></ul></div></div>
+            <div class="step-output"><b>Артефакт:</b> карта авторской модели и аргументации.</div>
+            <div class="test"><b>Проверка:</b> схема позволяет восстановить ход мысли без полного текста.</div>
+          </div></article>
+          <article class="step" id="step-4"><div class="step-index">04</div><div>
+            <h3>Достичь смыслового понимания</h3>
+            <p class="definition">Переходить от значений слов к смыслу высказываний, фрагментов и произведения как целого.</p>
+            <div class="step-body"><div><h4>Что делаем</h4><ul><li>Уточняем термины в языке самого автора.</li><li>Проверяем отношение части к целому и обратно.</li><li>Объясняем сложные фрагменты своими словами.</li><li>Сверяем объяснение с оригиналом и контекстом.</li></ul></div><div><h4>Контрольные вопросы</h4><ul><li>Что автор утверждает и почему?</li><li>Что остаётся неявным?</li><li>Могу ли привести корректный пример и контрпример?</li></ul></div></div>
+            <div class="step-output"><b>Артефакт:</b> реконструкция смысла, словарь, схема связей и список открытых вопросов.</div>
+            <div class="test"><b>Проверка:</b> собственный пересказ не подменяет смысл автора.</div>
+          </div></article>
+          <article class="step" id="step-5"><div class="step-index">05</div><div>
+            <h3>Провести критическую экспертизу</h3>
+            <p class="definition">Оценить не «нравится / не нравится», а основания, аргументацию и границы применимости конструкции.</p>
+            <div class="step-body"><div><h4>Семь ракурсов</h4><ul><li>Онтология: что признаётся существующим.</li><li>Антропология: каким понимается человек.</li><li>Аксиология: какие ценности и цели приняты.</li><li>Гносеология: каким образом познаётся предмет.</li><li>Эпистемология: как обосновано знание.</li><li>Теория: согласованность и объяснительная сила.</li><li>Праксиология: возможности и условия действия.</li></ul></div><div><h4>Разграничиваем</h4><ul><li>Утверждение автора.</li><li>Мою интерпретацию утверждения.</li><li>Мою оценку и её основания.</li><li>Логическую ошибку, недостаток данных и ограничение области применения — это разные случаи.</li></ul></div></div>
+            <div class="step-output"><b>Артефакт:</b> карта сильных сторон, ограничений, противоречий и вопросов для проверки.</div>
+            <div class="test"><b>Проверка:</b> каждая критика связана с конкретным фрагментом и ясным критерием.</div>
+          </div></article>
+          <article class="step" id="step-6"><div class="step-index">06</div><div>
+            <h3>Освоить знание</h3>
+            <p class="definition">Сделать содержание доступным для самостоятельного воспроизведения и применения, а не только узнавания при перечитывании.</p>
+            <div class="step-body"><div><h4>Что делаем</h4><ul><li>Восстанавливаем главное по памяти без книги.</li><li>Объясняем другому человеку простым языком.</li><li>Применяем идею к новой ситуации.</li><li>Возвращаемся к знанию через интервалы.</li></ul></div><div><h4>Контрольные вопросы</h4><ul><li>Что я могу восстановить без подсказок?</li><li>Какие различения и операции мне стали доступны?</li><li>Где я применю это знание?</li></ul></div></div>
+            <div class="step-output"><b>Артефакт:</b> собственная модель знания и список освоенных интеллектуальных инструментов.</div>
+            <div class="test"><b>Проверка:</b> есть успешное воспроизведение и применение к новому примеру.</div>
+          </div></article>
+          <article class="step" id="step-7"><div class="step-index">07</div><div>
+            <h3>Сравнить и интегрировать концепции</h3>
+            <p class="definition">Перейти от отдельной книги к предмету исследования и нескольким конкурирующим способам его понимания.</p>
+            <div class="step-body"><div><h4>Что делаем</h4><ul><li>Сравниваем тексты по общим вопросам.</li><li>Сопоставляем понятия, единицы анализа, основания.</li><li>Разделяем дополнения и противоречия.</li><li>Выявляем, что интегрируется, а что несовместимо.</li></ul></div><div><h4>Контрольные вопросы</h4><ul><li>Одинаков ли предмет у сопоставляемых авторов?</li><li>Откуда возникло противоречие?</li><li>Нужна единая модель или несколько режимов объяснения?</li></ul></div></div>
+            <div class="step-output"><b>Артефакт:</b> сравнительная матрица и черновик собственной интегративной конструкции.</div>
+            <div class="test"><b>Проверка:</b> интеграция не скрывает реальную несовместимость исходных предпосылок.</div>
+          </div></article>
+          <article class="step" id="step-8"><div class="step-index">08</div><div>
+            <h3>Создать интеллектуальный продукт</h3>
+            <p class="definition">Перевести прочитанное в результат собственной исследовательской, образовательной или управленческой деятельности.</p>
+            <div class="step-body"><div><h4>Что создаём</h4><ul><li>Гипотезу, понятие, модель, теорию.</li><li>Метод, диагностическую систему, инструмент.</li><li>Исследовательскую программу, статью, доклад.</li><li>Решение, образовательную технологию или план проверки.</li></ul></div><div><h4>Контрольные вопросы</h4><ul><li>Что стало возможно сделать после чтения?</li><li>Где источник, где моя интерпретация, где новая гипотеза?</li><li>Какой проверке подлежит новый продукт?</li></ul></div></div>
+            <div class="step-output"><b>Артефакт:</b> собственный результат с источниками, статусом и границами обоснованности.</div>
+            <div class="test"><b>Проверка:</b> результат можно передать другому человеку для использования или проверки.</div>
+          </div></article>
+        </div>
+        <div class="callout"><b>Принцип движения:</b> сначала понять автора, затем критиковать; сначала установить основания, затем интегрировать; отделять идеи, полученные из текста, от собственных гипотез. Обратные переходы между операциями нормальны.</div>
+      </section>
+
+      <section class="section" id="protocols" aria-labelledby="protocols-title">
+        <div class="sec-head"><div class="section-no">04 / Масштабы работы</div><h2 id="protocols-title">Три протокола применения</h2><p class="sub">Масштаб работы следует выбирать по значимости текста и интеллектуальной задаче.</p></div>
+        <div class="protocols">
+          <article class="card proto"><div class="pill">15–30 минут на книгу, ориентировочно</div><h3>Разведка</h3><p>Для отбора литературы перед углублённой работой.</p><ol><li>Поставить вопрос.</li><li>Изучить структуру.</li><li>Найти центральный тезис.</li><li>Оценить значимость и качество.</li><li>Выбрать дальнейший режим.</li></ol><div class="result"><b>Результат:</b> паспорт и решение: изучать полностью, выборочно, отложить, исключить.</div></article>
+          <article class="card proto"><div class="pill">Несколько сессий, по сложности текста</div><h3>Глубокое чтение</h3><p>Для ключевой монографии или принципиально важной статьи.</p><ol><li>Разведка и карта произведения.</li><li>Аналитическая проработка.</li><li>Самообъяснение и сверка.</li><li>Экспертиза оснований.</li><li>Воспроизведение и применение.</li><li>Интеграция и продукт.</li></ol><div class="result"><b>Результат:</b> четыре основных артефакта и освоенное знание.</div></article>
+          <article class="card proto"><div class="pill">Проектный цикл</div><h3>Исследовательский корпус</h3><p>Для построения теории, методологии или собственной модели.</p><ol><li>Сформулировать проблему.</li><li>Собрать карту источников.</li><li>Выделить ключевые работы.</li><li>Реконструировать концепции.</li><li>Сделать сравнительную матрицу.</li><li>Выявить противоречия.</li><li>Создать и проверить новую модель.</li></ol><div class="result"><b>Результат:</b> самостоятельная концепция и программа её проверки.</div></article>
+        </div>
+      </section>
+
+      <section class="section" id="team" aria-labelledby="team-title">
+        <div class="sec-head"><div class="section-no">05 / Командная практика</div><h2 id="team-title">Читательский семинар: 90 минут</h2><p class="sub">Цель встречи — произвести общий интеллектуальный результат, а не обменяться впечатлениями. Участники заранее читают согласованный фрагмент и готовят вопросы.</p></div>
+        <div class="card team-card">
+          <div><h3>Четыре сменяемые позиции</h3><div class="role-grid" style="margin-top:16px">
+            <div class="role"><strong>Реконструктор</strong><p>Передаёт позицию автора точно и без преждевременной оценки.</p></div>
+            <div class="role"><strong>Интерпретатор</strong><p>Проясняет термины, смыслы и трудные связи.</p></div>
+            <div class="role"><strong>Критик</strong><p>Проверяет основания, аргументацию и границы применения.</p></div>
+            <div class="role"><strong>Синтезатор</strong><p>Связывает прочитанное с другими концепциями и задачами команды.</p></div>
+          </div><p class="fine-print">Позиции переходят между участниками на каждой встрече: это развивает разные способности, а не закрепляет роли.</p></div>
+          <div><h3>Сценарий встречи</h3><ol class="agenda" style="margin-top:10px">
+            <li><time>10 мин</time><span>Постановка общего вопроса, индивидуальные затруднения.</span></li>
+            <li><time>20 мин</time><span>Восстановление позиции автора и карты аргументации.</span></li>
+            <li><time>20 мин</time><span>Совместное прояснение понятий и сложных фрагментов.</span></li>
+            <li><time>20 мин</time><span>Критическая экспертиза и обсуждение альтернатив.</span></li>
+            <li><time>15 мин</time><span>Синтез: общий вывод, схема, гипотеза или модель.</span></li>
+            <li><time>5 мин</time><span>Фиксация интеллектуального продукта и следующих шагов.</span></li>
+          </ol></div>
+        </div>
+        <div class="callout orange"><b>Правило модерации:</b> отделять «что сказал автор», «как мы это поняли» и «что мы об этом думаем». Если мнения расходятся, группа возвращается к точному фрагменту источника.</div>
+      </section>
+
+      <section class="section" id="artifacts" aria-labelledby="artifacts-title">
+        <div class="sec-head"><div class="section-no">06 / Результаты работы</div><h2 id="artifacts-title">Четыре артефакта для передачи знания</h2><p class="sub">Все ключевые результаты хранятся в стандартизованной форме. Это позволяет включать их в общую библиотеку команды и использовать для сравнительных исследований.</p></div>
+        <div class="artifact-list">
+          <article class="artifact"><div class="yield">Артефакт 01 · 1 страница</div><h3>Паспорт произведения</h3><p>Что это за текст и зачем мы к нему обращаемся.</p><ul><li>Автор, название, год, контекст.</li><li>Предмет, проблема, замысел, вывод.</li><li>Ключевые понятия и разделы.</li><li>Наш вопрос и решение о глубине чтения.</li></ul></article>
+          <article class="artifact"><div class="yield">Артефакт 02 · 1–3 страницы или схема</div><h3>Карта авторской конструкции</h3><p>Что и каким интеллектуальным способом построил автор.</p><ul><li>Основания, единица анализа, понятия.</li><li>Тезисы, аргументы и связи.</li><li>Модель, механизмы, объяснения.</li><li>Выводы и спорные места.</li></ul></article>
+          <article class="artifact"><div class="yield">Артефакт 03 · 1–2 страницы</div><h3>Карта критического осмысления</h3><p>Что обосновано, что ограничено, что требует проверки.</p><ul><li>Сильные стороны концепции.</li><li>Слабые стороны и вопросы.</li><li>Различение факта, интерпретации и оценки.</li><li>Контрпримеры и возможные проверки.</li></ul></article>
+          <article class="artifact"><div class="yield">Артефакт 04 · по масштабу задачи</div><h3>Карта интеграции и применения</h3><p>Что изменилось в нашей системе знаний и деятельности.</p><ul><li>Связи с другими авторами.</li><li>Уточнения понятий и моделей.</li><li>Новые гипотезы и решения.</li><li>Следующие исследования и действия.</li></ul></article>
+        </div>
+        <div class="flowband"><b>Минимальный стандарт:</b> у каждого существенного положения указывать конкретный источник и страницу. В артефактах отдельно маркировать пересказ автора, интерпретацию читателя и собственную гипотезу.</div>
+      </section>
+
+      <section class="section" id="worksheet" aria-labelledby="worksheet-title">
+        <div class="sec-head"><div class="section-no">07 / Применение</div><h2 id="worksheet-title">Рабочая карта читателя</h2><p class="sub">Заполните карту по выбранному произведению. Отмечайте завершённые операции; отчёт можно экспортировать в обычный текст для отправки команде. Заполнение не обязательно вести по порядку.</p></div>
+        <div class="card worksheet">
+          <div class="worksheet-header"><h3>Карточка исследования произведения</h3><p>Данные сохраняются локально на устройстве. Файл не отправляет введённую информацию в интернет.</p></div>
+          <div class="ws-actions screen-only">
+            <button class="btn btn-primary btn-small" type="button" id="export-txt">Скачать отчёт TXT</button>
+            <button class="btn btn-light btn-small" type="button" id="copy-report">Скопировать отчёт</button>
+            <button class="btn btn-light btn-small" type="button" id="reset-form">Очистить карту</button>
+            <span class="ws-status" id="ws-status" role="status" aria-live="polite">Готово к заполнению</span>
+          </div>
+          <noscript><div class="noscript">JavaScript отключён: карту можно заполнить вручную и распечатать, но локальное автосохранение и экспорт TXT недоступны.</div></noscript>
+          <form id="reading-form" class="ws-body" autocomplete="off">
+            <div class="fields">
+              <div class="field"><label for="book">Произведение</label><input type="text" id="book" name="book" placeholder="Название книги или статьи"></div>
+              <div class="field"><label for="author">Автор / источник</label><input type="text" id="author" name="author" placeholder="Автор и, при необходимости, год"></div>
+              <div class="field"><label for="type">Тип текста</label><select id="type" name="type"><option value="">Выбрать</option><option>Философский трактат</option><option>Теоретическая монография</option><option>Эмпирическое исследование</option><option>Методологическое произведение</option><option>Практическая литература</option><option>Другой</option></select></div>
+              <div class="field"><label for="reading-mode">Режим чтения</label><select id="reading-mode" name="reading-mode"><option value="">Выбрать</option><option>Ориентировочный</option><option>Поисково-избирательный</option><option>Аналитический</option><option>Исследовательско-синтетический</option></select></div>
+              <div class="field full"><label for="question">Исследовательский вопрос</label><textarea id="question" name="question" placeholder="Какую проблему изучаю или решаю с помощью этого текста?"></textarea></div>
+              <div class="field full"><label for="desired">Ожидаемый интеллектуальный продукт</label><textarea id="desired" name="desired" placeholder="Например: карта концепции, сравнительная матрица, гипотеза, модель, метод, решение..."></textarea></div>
+            </div>
+            <div class="ws-subhead"><h4>Восемь операций: фиксация результата</h4><p>Впишите главное, укажите страницы и отметьте операцию выполненной только после проверки результата.</p></div>
+            <div class="ws-step"><div class="ws-step-head"><label for="note-1">01. Постановка задачи</label><label class="check" for="done-1"><input id="done-1" name="done-1" type="checkbox"><span>Выполнено</span></label></div><textarea id="note-1" name="note-1" placeholder="Проблема, пробел в знании, почему выбран источник, критерий успеха..."></textarea></div>
+            <div class="ws-step"><div class="ws-step-head"><label for="note-2">02. Разведка произведения</label><label class="check" for="done-2"><input id="done-2" name="done-2" type="checkbox"><span>Выполнено</span></label></div><textarea id="note-2" name="note-2" placeholder="Предмет, замысел, контекст, структура, ключевые разделы..."></textarea></div>
+            <div class="ws-step"><div class="ws-step-head"><label for="note-3">03. Интеллектуальная архитектура</label><label class="check" for="done-3"><input id="done-3" name="done-3" type="checkbox"><span>Выполнено</span></label></div><textarea id="note-3" name="note-3" placeholder="Понятия, единица анализа, тезисы, аргументы, модель автора..."></textarea></div>
+            <div class="ws-step"><div class="ws-step-head"><label for="note-4">04. Смысловое понимание</label><label class="check" for="done-4"><input id="done-4" name="done-4" type="checkbox"><span>Выполнено</span></label></div><textarea id="note-4" name="note-4" placeholder="Моё объяснение сложных положений, сверка с оригиналом, неясные места..."></textarea></div>
+            <div class="ws-step"><div class="ws-step-head"><label for="note-5">05. Критическая экспертиза</label><label class="check" for="done-5"><input id="done-5" name="done-5" type="checkbox"><span>Выполнено</span></label></div><textarea id="note-5" name="note-5" placeholder="Сильные стороны, ограничения, основания, доказательства, контрпримеры..."></textarea></div>
+            <div class="ws-step"><div class="ws-step-head"><label for="note-6">06. Когнитивное освоение</label><label class="check" for="done-6"><input id="done-6" name="done-6" type="checkbox"><span>Выполнено</span></label></div><textarea id="note-6" name="note-6" placeholder="Что воспроизвёл по памяти, объяснил другим и применил к новому случаю..."></textarea></div>
+            <div class="ws-step"><div class="ws-step-head"><label for="note-7">07. Сравнение и интеграция</label><label class="check" for="done-7"><input id="done-7" name="done-7" type="checkbox"><span>Выполнено</span></label></div><textarea id="note-7" name="note-7" placeholder="Сопоставленные авторы, совпадения, противоречия, новая конструкция..."></textarea></div>
+            <div class="ws-step"><div class="ws-step-head"><label for="note-8">08. Собственный продукт</label><label class="check" for="done-8"><input id="done-8" name="done-8" type="checkbox"><span>Выполнено</span></label></div><textarea id="note-8" name="note-8" placeholder="Созданный результат, его статус, на каких источниках основан и как проверить..."></textarea></div>
+            <div class="progress-wrap screen-only"><div class="progress" role="progressbar" aria-label="Выполнено операций" aria-valuemin="0" aria-valuemax="8" aria-valuenow="0" id="progressbar"><div class="progress-fill" id="progress-fill"></div></div><span id="progress-label" class="progress-label">0 из 8 операций</span></div>
+            <p class="fine-print screen-only">Автосохранение работает только в этом браузере и зависит от настроек его хранилища. Для обмена результатами используйте «Скачать отчёт TXT» или «Скопировать отчёт». Не вводите конфиденциальные данные на общедоступном компьютере.</p>
+          </form>
+          <div class="print-only print-record" id="print-record"></div>
+        </div>
+      </section>
+
+      <section class="section" id="quality" aria-labelledby="quality-title">
+        <div class="sec-head"><div class="section-no">08 / Контроль результата</div><h2 id="quality-title">Семь критериев качества чтения</h2><p class="sub">Это рабочие критерии самопроверки, не стандартизованная психологическая шкала. Они полезнее простой метрики количества страниц.</p></div>
+        <div class="criteria">
+          <div class="criterion"><div><strong>Точность</strong><p>Могу корректно изложить позицию автора, не подменяя её собственной?</p></div></div>
+          <div class="criterion"><div><strong>Структурность</strong><p>Могу представить произведение как систему понятий, тезисов и отношений?</p></div></div>
+          <div class="criterion"><div><strong>Обоснованность</strong><p>Понимаю, как автор получил выводы и каков статус его доказательств?</p></div></div>
+          <div class="criterion"><div><strong>Самостоятельная критика</strong><p>Могу обоснованно выявить ограничения и альтернативные объяснения?</p></div></div>
+          <div class="criterion"><div><strong>Устойчивое освоение</strong><p>Могу спустя время воспроизвести и использовать основные идеи без подсказок?</p></div></div>
+          <div class="criterion"><div><strong>Интегративность</strong><p>Могу связать концепцию с другими источниками, не смешивая несовместимое?</p></div></div>
+          <div class="criterion"><div><strong>Продуктивность</strong><p>Могу создать на основе знания проверяемую гипотезу, модель, метод или решение?</p></div></div>
+        </div>
+        <div class="callout"><b>Критерий завершения:</b> чтение считается достаточным не тогда, когда прочитана последняя страница, а тогда, когда получен результат, соответствующий исходной задаче. Для поискового чтения это может быть одно обоснованное положение; для исследовательского — целая модель.</div>
+      </section>
+
+      <section class="section" id="sources" aria-labelledby="sources-title">
+        <div class="sec-head"><div class="section-no">09 / Основания и границы</div><h2 id="sources-title">Интеллектуальные источники framework</h2><p class="sub">Framework является интегративной авторской сборкой, а не воспроизведением единой признанной научной модели. В него включены элементы разных исследовательских и методологических традиций.</p></div>
+        <div class="references">
+          <ol>
+            <li>С. И. Поварнин. «Как читать книги» (1924); «Как читать книги для самообразования» (1928). Виды и проработка чтения, культура интеллектуальной работы.</li>
+            <li>Mortimer J. Adler, Charles Van Doren. <i>How to Read a Book</i> (1972). Инспекционное, аналитическое и синтопическое чтение.</li>
+            <li>Г. И. Богин. «Обретение способности понимать: Введение в филологическую герменевтику» (2001). Смысл и деятельность понимания.</li>
+            <li>Walter Kintsch. <i>Comprehension: A Paradigm for Cognition</i> (1998). Построение ментальной модели текста.</li>
+            <li>Danielle McNamara (ed.). <i>Reading Comprehension Strategies: Theories, Interventions, and Technologies</i> (2007). Стратегии понимания и самообъяснения.</li>
+            <li>S. Keshav. <i>How to Read a Paper</i> (2007). Трёхпроходная работа с научной публикацией.</li>
+            <li>John Dunlosky et al. <i>Improving Students’ Learning With Effective Learning Techniques</i> (2013). Оценка эффективности учебных техник.</li>
+            <li>Henry L. Roediger III, Jeffrey D. Karpicke. <i>Test-Enhanced Learning: Taking Memory Tests Improves Long-Term Retention</i> (2006). Извлечение информации из памяти.</li>
+            <li>Michelene T. H. Chi et al. <i>Eliciting Self-Explanations Improves Understanding</i> (1994). Самообъяснение.</li>
+            <li>Jean-François Rouet. <i>The Skills of Document Use</i> (2006). Работа с несколькими документами.</li>
+            <li>M. Anne Britt, Jean-François Rouet, Amanda Durik. <i>Literacy Beyond Text Comprehension: A Theory of Purposeful Reading</i> (2018). Чтение как решение задачи.</li>
+            <li>Annemarie S. Palincsar, Ann L. Brown. <i>Reciprocal Teaching of Comprehension-Fostering and Comprehension-Monitoring Activities</i> (1984). Совместная работа с пониманием текста.</li>
+          </ol>
+          <div class="callout orange" style="margin-bottom:0"><b>Граница доказательности:</b> практика извлечения из памяти, самообъяснение и некоторые стратегии понимания имеют экспериментальную поддержку. Герменевтическое, аналитическое и синтопическое чтение — прежде всего методологические системы. Нельзя считать экспериментально подтверждённой всю восьмишаговую конструкцию целиком.</div>
+        </div>
+      </section>
+
+      <footer class="foot">
+        <div>Интегративное чтение · Framework 1.0 · Материал для командного применения.</div>
+        <div class="print-hide">Автономный HTML · Работает без внешних сервисов · <a href="#top">К началу</a></div>
+      </footer>
+    </main>
+  </div>
+  <script>
+    (() => {
+      'use strict';
+      const form = document.getElementById('reading-form');
+      const status = document.getElementById('ws-status');
+      const progressFill = document.getElementById('progress-fill');
+      const progressLabel = document.getElementById('progress-label');
+      const progressbar = document.getElementById('progressbar');
+      const storageKey = 'integrative-reading-framework-v1';
+      const fields = Array.from(form.querySelectorAll('input, select, textarea'));
+      const doneNames = Array.from({length:8}, (_, i) => 'done-' + (i+1));
+      const labels = {
+        book: 'Произведение', author: 'Автор / источник', type: 'Тип текста',
+        'reading-mode': 'Режим чтения', question: 'Исследовательский вопрос', desired: 'Ожидаемый интеллектуальный продукт',
+        'note-1': '01. Постановка задачи', 'note-2': '02. Разведка произведения',
+        'note-3': '03. Интеллектуальная архитектура', 'note-4': '04. Смысловое понимание',
+        'note-5': '05. Критическая экспертиза', 'note-6': '06. Когнитивное освоение',
+        'note-7': '07. Сравнение и интеграция', 'note-8': '08. Собственный продукт'
+      };
+      const setStatus = (message) => { status.textContent = message; };
+      function snapshot() {
+        const out = {};
+        fields.forEach(field => { out[field.name] = field.type === 'checkbox' ? field.checked : field.value; });
+        return out;
+      }
+      function hydrate(values) {
+        fields.forEach(field => {
+          if (!Object.prototype.hasOwnProperty.call(values, field.name)) return;
+          if (field.type === 'checkbox') field.checked = !!values[field.name];
+          else field.value = String(values[field.name] ?? '');
+        });
+      }
+      function updateProgress() {
+        const count = doneNames.filter(name => form.elements[name].checked).length;
+        progressFill.style.width = (count / 8 * 100) + '%';
+        progressLabel.textContent = count + ' из 8 операций';
+        progressbar.setAttribute('aria-valuenow', String(count));
+      }
+      let canSave = true;
+      try {
+        const saved = localStorage.getItem(storageKey);
+        if (saved) hydrate(JSON.parse(saved));
+      } catch (error) {
+        canSave = false;
+        setStatus('Автосохранение недоступно — используйте экспорт TXT');
+      }
+      updateProgress();
+      function save() {
+        updateProgress();
+        if (!canSave) return;
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(snapshot()));
+          setStatus('Сохранено в этом браузере');
+        } catch (error) {
+          canSave = false;
+          setStatus('Автосохранение недоступно — используйте экспорт TXT');
+        }
+      }
+      form.addEventListener('input', save);
+      form.addEventListener('change', save);
+      const normalized = s => String(s ?? '').replace(/\r\n?/g, '\n').trim();
+      function reportText() {
+        const s = snapshot();
+        const lines = [
+          'ИНТЕГРАТИВНОЕ ЧТЕНИЕ',
+          'Рабочая карта читателя',
+          'Экспорт: ' + new Date().toLocaleString('ru-RU'),
+          '',
+          'Исходные данные'
+        ];
+        ['book','author','type','reading-mode','question','desired'].forEach(key => {
+          lines.push(labels[key] + ':');
+          lines.push(normalized(s[key]) || '[не заполнено]', '');
+        });
+        lines.push('ВОСЕМЬ ОПЕРАЦИЙ', '');
+        for (let i = 1; i <= 8; i++) {
+          lines.push(labels['note-' + i] + ' [' + (s['done-' + i] ? 'выполнено' : 'не отмечено') + ']');
+          lines.push(normalized(s['note-' + i]) || '[не заполнено]', '');
+        }
+        lines.push('Выполнено операций: ' + doneNames.filter(name => s[name]).length + ' из 8');
+        lines.push('');
+        lines.push('Методологическое правило: различать утверждения автора, собственные интерпретации и гипотезы. Указывать страницы и источники.');
+        return lines.join('\n');
+      }
+      function downloadText(filename, content) {
+        const blob = new Blob(['\ufeff' + content], {type: 'text/plain;charset=utf-8'});
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url; anchor.download = filename;
+        document.body.appendChild(anchor);
+        anchor.click(); anchor.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+      document.getElementById('export-txt').addEventListener('click', () => {
+        const slug = (form.elements.book.value || 'proizvedenie')
+          .toLocaleLowerCase('ru-RU').replace(/[^a-zа-яё0-9]+/gi,'-').replace(/^-|-$/g,'').slice(0, 48);
+        downloadText('karta-chteniya-' + (slug || 'tekst') + '.txt', reportText());
+        setStatus('TXT-отчёт подготовлен');
+      });
+      document.getElementById('copy-report').addEventListener('click', async () => {
+        const value = reportText();
+        try {
+          if (!navigator.clipboard || !window.isSecureContext) throw new Error('Clipboard unavailable');
+          await navigator.clipboard.writeText(value);
+          setStatus('Отчёт скопирован в буфер обмена');
+        } catch (error) {
+          const helper = document.createElement('textarea');
+          helper.value = value;
+          helper.style.position = 'fixed'; helper.style.opacity = '0';
+          document.body.appendChild(helper); helper.focus(); helper.select();
+          let success = false;
+          try { success = document.execCommand('copy'); } catch (e) {}
+          helper.remove();
+          setStatus(success ? 'Отчёт скопирован' : 'Копирование недоступно — скачайте TXT');
+        }
+      });
+      document.getElementById('reset-form').addEventListener('click', () => {
+        if (!window.confirm('Очистить все поля и отметки рабочей карты в этом браузере?')) return;
+        form.reset();
+        try { localStorage.removeItem(storageKey); } catch(e) {}
+        updateProgress();
+        setStatus('Рабочая карта очищена');
+      });
+      function preparePrint() {
+        const data = snapshot();
+        const root = document.getElementById('print-record');
+        root.replaceChildren();
+        const title = document.createElement('h3');
+        title.textContent = 'Заполненная рабочая карта';
+        root.appendChild(title);
+        for (const key of Object.keys(labels)) {
+          const item = document.createElement('div');
+          item.className = 'print-record-item';
+          const strong = document.createElement('b');
+          strong.textContent = labels[key] + (key.startsWith('note-') ? ' [' + (data['done-' + key.slice(5)] ? 'выполнено' : 'не отмечено') + ']' : '');
+          const p = document.createElement('p');
+          p.textContent = normalized(data[key]) || 'Не заполнено';
+          item.append(strong, p); root.appendChild(item);
+        }
+      }
+      window.addEventListener('beforeprint', preparePrint);
+    })();
+  </script>
+</body>
+</html>
