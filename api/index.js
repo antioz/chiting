@@ -44,7 +44,7 @@ async function handler(event) {
   for (const k of Object.keys(headersRaw)) headersLow[k.toLowerCase()] = headersRaw[k];
   const origin = headersLow['origin'] || '';
   const cors = C.siteOrigins.some(o => origin.startsWith(o)) ? origin : C.siteOrigins[0];
-  const headers = { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': cors, 'Access-Control-Allow-Headers': 'Authorization,Content-Type', 'Access-Control-Allow-Methods': '*' };
+  const headers = { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': cors, 'Access-Control-Allow-Headers': 'Authorization,Content-Type,X-Auth-Token', 'Access-Control-Allow-Methods': '*' };
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
   try {
     await ready();
