@@ -43,7 +43,7 @@ async function levels() {
   const rs = await execute(
     `SELECT l.id AS id, l.rule_code AS rule_code, l.text_id AS text_id, l.questions_json AS questions_json, l.delay_hours AS delay_hours, l.difficulty AS difficulty,
             r.kid_formulation AS rule_kid, r.strict_formulation AS rule_strict,
-            t.title AS text_title, t.author AS text_author
+            t.title AS text_title, t.author AS text_author, t.full_source_url AS text_full_source_url
      FROM levels AS l
      JOIN rules AS r ON r.code = l.rule_code
      JOIN texts AS t ON t.id = l.text_id

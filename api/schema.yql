@@ -1,7 +1,7 @@
 CREATE TABLE users (id Utf8, login Utf8, pass_hash Utf8, role Utf8, family_id Utf8, invite_code Utf8, created_at Uint64, PRIMARY KEY (id));
 CREATE TABLE invites (code Utf8, used_count Uint32, `limit` Uint32, active Bool, PRIMARY KEY (code));
 CREATE TABLE waitlist (id Utf8, name Utf8, contact Utf8, created_at Uint64, status Utf8, PRIMARY KEY (id));
-CREATE TABLE texts (id Utf8, title Utf8, author Utf8, body_json Json, fragments_json Json, checklist_score Uint32, source Utf8, PRIMARY KEY (id));
+CREATE TABLE texts (id Utf8, title Utf8, author Utf8, body_json Json, fragments_json Json, checklist_score Uint32, source Utf8, full_source_url Utf8, PRIMARY KEY (id));
 CREATE TABLE rules (code Utf8, kid_formulation Utf8, strict_formulation Utf8, version Utf8, PRIMARY KEY (code));
 CREATE TABLE levels (id Utf8, rule_code Utf8, text_id Utf8, questions_json Json, delay_hours Uint32, difficulty Uint32, PRIMARY KEY (id));
 CREATE TABLE answer_bases (id Utf8, level_qid Utf8, kind Utf8, etalon Utf8, clusters_json Json, version Utf8, PRIMARY KEY (id));

@@ -28,6 +28,7 @@ routes.levels = async (_p, ctx) => {
     out.push({
       id: l.id, rule_code: l.rule_code, rule: l.rule_kid,
       text_id: l.text_id, text_title: l.text_title, text_author: l.text_author,
+      full_source_url: l.text_full_source_url || null,
       delay_hours: Number(l.delay_hours),
       available: !locked,
       available_at: locked ? Number(last.updated_at) + delayMs : null,
