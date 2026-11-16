@@ -42,6 +42,21 @@ function leaksEtalon(question, etalon) {
   return false;
 }
 
+// Плохой сократовский вопрос: (а) в тексте НЕТ знака «?»; (б) в тексте есть
+// маркеры отказа/перевода темы (модель отказалась от беседы, а не задала
+// вопрос). Такая генерация отклоняется — как утечка эталона (регенерация).
+// «прости(те)» проверяем как отдельное слово, чтобы «простил» не ловился.
+const REFUSAL_MARKERS = ['не могу', 'не можем', 'извините', 'другую тему', 'внешн', 'политик', 'неприемлем'];
+function isBadSocraticQuestion(q) {
+  const text = String(q || '').toLowerCase();
+  if (!text) return true;
+  if (!text.includes('?')) return true;
+  if (REFUSAL_MARKERS.some(m => text.includes(m))) return true;
+  if (/давай(те)?\s+поговорим/.test(text)) return true;
+  if (/(^|[^\p{L}\p{N}])прости(те)?([^\p{L}\p{N}]|$)/u.test(text)) return true;
+  return false;
+}
+
 // Нулевые критерии по qid — из последнего pack-ревью (criteria == 0). Не распарсилось — все пять.
 async function zeroCriteriaFor(id, qid) {
   try {
@@ -101,7 +116,7 @@ async function ask({ user, id, qid }) {
       tokens_in: out.tokensIn, tokens_out: out.tokensOut, cost_rub: out.costRub, t_spent: tStart,
     });
     const qText = String(out.text || '').trim();
-    if (qText && !leaksEtalon(qText, etalon)) {
+    if (qText && !leaksEtalon(qText, etalon) && !isBadSocraticQuestion(qText)) {
       await repo.addSocraticTurn({ attempt_id: id, qid, step, question_text: qText, created_at: Date.now() });
       await repo.addEvent(user.id, id, 'socratic_ask', { qid, step }, Date.now());
       return { body: { question: qText, step } };
@@ -133,4 +148,4 @@ async function answer({ user, id, qid, text }) {
 function _setRepo(r) { repo = r; }
 function setLlm(fn) { llm = { complete: fn }; }
 
-module.exports = { ask, answer, _setRepo, setLlm, leaksEtalon };
+module.exports = { ask, answer, _setRepo, setLlm, leaksEtalon, isBadSocraticQuestion };

@@ -66,9 +66,9 @@ test('ask: вопрос содержит эталон → генерация п�
   // Первый ответ — плохой (прямой кусок эталона), второй — чистый.
   socratic.setLlm(mockLlm(n => (n === 1
     ? 'Ты помнишь, что Ванька жалуется деду, что хозяин его избил?'
-    : 'Покажи место в тексте, где герой молит о помощи.')));
+    : 'Покажи место в тексте, где герой молит о помощи?')));
   const res = await socratic.ask({ user: USER, id: 'a1', qid: 'q2' });
-  assert.strictEqual(res.body.question, 'Покажи место в тексте, где герой молит о помощи.');
+  assert.strictEqual(res.body.question, 'Покажи место в тексте, где герой молит о помощи?');
   assert.strictEqual(llmCalls, 2);
   assert.strictEqual(calls.reviews.length, 2, 'каждый вызов ЛЛМ — запись в llm_reviews');
   assert.ok(!('iteration' in calls.reviews[0][0]) && !('iteration' in calls.reviews[1][0]),
@@ -156,6 +156,49 @@ test('ask: count=11 на входе, первый вопрос с эталоно
   assert.deepStrictEqual(res.body, { error: 'llm_limit' });
   assert.strictEqual(llmCalls, 1, 'перед 2-й итерацией лимит (11+1=12) перепроверен — второй вызов не делается');
   assert.strictEqual(calls.reviews.length, 1);
+  socratic._setRepo(require('../lib/repo'));
+});
+
+test('ask: генерация без «?» → регенерация, вернулся хороший вопрос', async () => {
+  const { repo, calls } = makeRepo();
+  socratic._setRepo(repo);
+  socratic.setLlm(mockLlm(n => (n === 1
+    ? 'Спроси его, где герой просит о помощи.'
+    : 'Покажи место в тексте, где герой просит о помощи?')));
+  const res = await socratic.ask({ user: USER, id: 'a1', qid: 'q2' });
+  assert.strictEqual(res.body.question, 'Покажи место в тексте, где герой просит о помощи?');
+  assert.strictEqual(llmCalls, 2);
+  assert.strictEqual(calls.turns.length, 1);
+  socratic._setRepo(require('../lib/repo'));
+});
+
+test('ask: отказ/перевод темы («не могу обсуждать…») → регенерация, вернулся хороший вопрос', async () => {
+  const { repo, calls } = makeRepo();
+  socratic._setRepo(repo);
+  socratic.setLlm(mockLlm(n => (n === 1
+    ? 'Я не могу обсуждать эту тему. Давайте поговорим о чём-нибудь ещё.'
+    : 'Почему Ванька решил писать именно деду?')));
+  const res = await socratic.ask({ user: USER, id: 'a1', qid: 'q2' });
+  assert.strictEqual(res.body.question, 'Почему Ванька решил писать именно деду?');
+  assert.strictEqual(llmCalls, 2);
+  assert.strictEqual(calls.turns.length, 1);
+  socratic._setRepo(require('../lib/repo'));
+});
+
+test('isBadSocraticQuestion: без «?» или маркер отказа — плохой вопрос', () => {
+  assert.strictEqual(socratic.isBadSocraticQuestion('Просто скажи, что он устал.'), true);
+  assert.strictEqual(socratic.isBadSocraticQuestion('Извини, но эта тема неприемлема, давай поговорим о другой теме.'), true);
+  assert.strictEqual(socratic.isBadSocraticQuestion('Почему герой просит о помощи?'), false);
+});
+
+test('ask: happy path → {question} без регенерации (не сломан пост-фильтром)', async () => {
+  const { repo, calls } = makeRepo();
+  socratic._setRepo(repo);
+  socratic.setLlm(mockLlm('А что ты имеешь в виду, когда пишешь «не мог»?'));
+  const res = await socratic.ask({ user: USER, id: 'a1', qid: 'q2' });
+  assert.strictEqual(res.body.question, 'А что ты имеешь в виду, когда пишешь «не мог»?');
+  assert.strictEqual(llmCalls, 1);
+  assert.strictEqual(calls.turns.length, 1);
   socratic._setRepo(require('../lib/repo'));
 });
 
