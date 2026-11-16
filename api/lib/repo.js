@@ -230,7 +230,9 @@ async function getReflectionAnswers(attemptId) {
 async function createCoupon(c) {
   await execute(
     'INSERT INTO coupons (id, user_id, attempt_id, amount, status, code, created_at) ' +
-    'SELECT $id, $u, $a, $am, $s, $c, $ca WHERE NOT EXISTS (SELECT 1 FROM coupons WHERE attempt_id = $a)',
+    'SELECT id, user_id, attempt_id, amount, status, code, created_at ' +
+    'FROM (SELECT $id AS id, $u AS user_id, $a AS attempt_id, $am AS amount, $s AS status, $c AS code, $ca AS created_at) ' +
+    'WHERE NOT EXISTS (SELECT 1 FROM coupons WHERE attempt_id = $a)',
     { $id: db.V.s(c.id), $u: db.V.s(c.user_id), $a: db.V.s(c.attempt_id), $am: db.V.u32(c.amount), $s: db.V.s(c.status), $c: db.V.s(c.code), $ca: db.V.u64(c.created_at) }
   );
 }
@@ -247,6 +249,50 @@ async function listUserAttempts(userId) {
   return rs[0] || [];
 }
 
+// --- админка (task-10) ---
+async function getUserById(id) {
+  const rs = await execute('SELECT * FROM users WHERE id = $i', { $i: db.V.s(id) });
+  return rs[0] && rs[0][0];
+}
+async function listUsers() {
+  const rs = await execute('SELECT * FROM users ORDER BY created_at');
+  return rs[0] || [];
+}
+// Попытки пользователя полностью (в отличие от listUserAttempts — кратко, для кабинета).
+async function listAttemptsAdmin(userId) {
+  const rs = await execute('SELECT * FROM attempts WHERE user_id = $u ORDER BY created_at DESC', { $u: db.V.s(userId) });
+  return rs[0] || [];
+}
+async function listLlmReviewsByAttempt(attemptId) {
+  const rs = await execute('SELECT * FROM llm_reviews WHERE attempt_id = $a ORDER BY created_at', { $a: db.V.s(attemptId) });
+  return rs[0] || [];
+}
+// Все вызовы ЛЛМ с user_id attempt'а — для экономики по дням/по пользователям
+// (агрегация по дате в JS: created_at — Uint64 ms, объём малый).
+async function listAllLlmReviews() {
+  const rs = await execute(
+    `SELECT r.attempt_id AS attempt_id, r.scope AS scope, r.qid AS qid, r.tokens_in AS tokens_in,
+            r.tokens_out AS tokens_out, r.cost_rub AS cost_rub, r.created_at AS created_at,
+            a.user_id AS user_id
+     FROM llm_reviews AS r JOIN attempts AS a ON a.id = r.attempt_id`
+  );
+  return rs[0] || [];
+}
+async function listWaitlist() {
+  const rs = await execute('SELECT * FROM waitlist ORDER BY created_at DESC');
+  return rs[0] || [];
+}
+async function getWaitlist(id) {
+  const rs = await execute('SELECT * FROM waitlist WHERE id = $i', { $i: db.V.s(id) });
+  return rs[0] && rs[0][0];
+}
+async function setWaitlistStatus(id, status) {
+  await execute('UPDATE waitlist SET status = $s WHERE id = $i', { $s: db.V.s(status), $i: db.V.s(id) });
+}
+async function createInvite(code, limit) {
+  await execute('INSERT INTO invites (code, used_count, `limit`, active) VALUES ($c, 0, $l, true)', { $c: db.V.s(code), $l: db.V.u32(limit) });
+}
+
 function safeParse(j, dflt) { try { return typeof j === 'string' ? JSON.parse(j) : (j || dflt); } catch { return dflt; } }
 
-module.exports = { execute, getUserByLogin, createUser, inviteUse, waitlistAdd, levels, answerBases, lastApprovedAttempt, getLevel, getAttempt, createAttempt, upsertAnswer, getAnswers, setAttemptStatus, addEvent, getText, countLlmReviews, addLlmReview, updateAttemptReview, countSocraticTurns, addSocraticTurn, getSocraticTurns, getLastLlmReview, addReflectionAnswer, getReflectionAnswers, createCoupon, getCouponByAttempt, listCoupons, listUserAttempts, bumpIterations, listEvents, lastOpenAttempt };
+module.exports = { execute, getUserByLogin, createUser, inviteUse, waitlistAdd, levels, answerBases, lastApprovedAttempt, getLevel, getAttempt, createAttempt, upsertAnswer, getAnswers, setAttemptStatus, addEvent, getText, countLlmReviews, addLlmReview, updateAttemptReview, countSocraticTurns, addSocraticTurn, getSocraticTurns, getLastLlmReview, addReflectionAnswer, getReflectionAnswers, createCoupon, getCouponByAttempt, listCoupons, listUserAttempts, bumpIterations, listEvents, lastOpenAttempt, getUserById, listUsers, listAttemptsAdmin, listLlmReviewsByAttempt, listAllLlmReviews, listWaitlist, getWaitlist, setWaitlistStatus, createInvite };

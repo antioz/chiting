@@ -8,6 +8,8 @@ const review = require('./lib/handlers/review');
 const socratic = require('./lib/handlers/socratic');
 const finish = require('./lib/handlers/finish');
 const iterate = require('./lib/handlers/iterate');
+const admin = require('./lib/handlers/admin');
+const exportReport = require('./lib/export');
 
 // SECRET из env функции; jwt.init при холодном старте (index.js грузится один раз на инстанс).
 jwt.init(process.env.SECRET || C.secret);
@@ -45,6 +47,15 @@ routes.hint = (p, ctx) => iterate.hint({ user: ctx.user, id: p.id, qid: p.qid })
 routes.next = (p, ctx) => iterate.next({ user: ctx.user, id: p.id });
 // Текст уровня для фронта: мини-текст фрагмента + пометка split, если attempt — разбивка.
 routes['attempt-get'] = (p, ctx) => iterate.get({ user: ctx.user, id: p.id });
+
+// Админка (task-10): полный отчёт по попытке, экономика ЛЛМ, вейт-лист, экспорт.
+// Все a=admin/* закрыты middleware role=admin (403 иначе); export — admin или владелец attempt.
+routes['admin/users'] = (_p, _ctx) => admin.users();
+routes['admin/report'] = (p, _ctx) => admin.report({ attempt_id: p.attempt_id });
+routes['admin/economy'] = (_p, _ctx) => admin.economy();
+routes['admin/waitlist'] = (_p, _ctx) => admin.waitlist();
+routes['admin/waitlist-approve'] = (p, _ctx) => admin.waitlistApprove({ id: p.id });
+routes['export'] = (p, ctx) => exportReport.route({ attempt_id: p.attempt_id }, ctx);
 
 // Список уровней для ребёнка: правило (kid_formulation), текст, delay_hours и доступность
 // по времени последнего approved-прохода (§6 методологии: проход = правило на текст).
@@ -109,7 +120,8 @@ async function handler(event) {
     }
     const out = await fn({ ...p, ...body }, ctx);
     const payload = out && out.body !== undefined ? out.body : out;
-    return { statusCode: out.status || 200, headers, body: typeof payload === 'string' ? payload : JSON.stringify(payload) };
+    const outHeaders = (out && out.headers) || {};
+    return { statusCode: out.status || 200, headers: { ...headers, ...outHeaders }, body: typeof payload === 'string' ? payload : JSON.stringify(payload) };
   } catch (e) {
     console.error(e);
     return { statusCode: 500, headers, body: JSON.stringify({ error: 'internal' }) };
