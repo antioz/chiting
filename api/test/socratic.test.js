@@ -76,17 +76,46 @@ test('ask: вопрос содержит эталон → генерация п�
   socratic._setRepo(require('../lib/repo'));
 });
 
-test('ask: 3 попытки с эталоном → 502 socratic_filter', async () => {
+test('ask: 4 попытки с эталоном → 502 socratic_filter', async () => {
   const { repo, calls } = makeRepo();
   socratic._setRepo(repo);
   socratic.setLlm(mockLlm('Ванька жалуется деду, что хозяин его избил, верно?'));
   const res = await socratic.ask({ user: USER, id: 'a1', qid: 'q2' });
   assert.strictEqual(res.status, 502);
   assert.deepStrictEqual(res.body, { error: 'socratic_filter' });
-  assert.strictEqual(llmCalls, 3, '1 основная + 2 повтора');
-  assert.strictEqual(calls.reviews.length, 3);
+  assert.strictEqual(llmCalls, 4, '1 основная + 3 повтора');
+  assert.strictEqual(calls.reviews.length, 4);
   assert.strictEqual(calls.turns.length, 0, 'отклонённый вопрос в socratic_turns не пишется');
   socratic._setRepo(require('../lib/repo'));
+});
+
+test('ask: вопрос с одним ключевым словом из эталона (уровень П5) принимается', async () => {
+  const { repo, calls } = makeRepo({
+    levels: async () => [{ id: 'lvl-p2-vanka', text_id: 'text-vanka', rule_kid: 'Скажи суть', questions: QUESTIONS }],
+    answerBases: async () => [{ level_qid: 'lvl-p2-vanka:q2', etalon: 'Ванька чудесный мальчик, который просит деда забрать его в деревню.', clusters: [] }],
+  });
+  socratic._setRepo(repo);
+  socratic.setLlm(mockLlm('А что в тексте значит слово «чудесный»?'));
+  const res = await socratic.ask({ user: USER, id: 'a1', qid: 'q2' });
+  assert.strictEqual(res.status, undefined);
+  assert.deepStrictEqual(res.body, { question: 'А что в тексте значит слово «чудесный»?', step: 1 });
+  assert.strictEqual(calls.turns.length, 1);
+  socratic._setRepo(require('../lib/repo'));
+});
+
+test('ask: вопрос с длинным куском эталона (≥25 симв) отклоняется → 502', async () => {
+  const { repo, calls } = makeRepo();
+  socratic._setRepo(repo);
+  socratic.setLlm(mockLlm('А ведь Ванька жалуется деду, что хозяин его избил, так?'));
+  const res = await socratic.ask({ user: USER, id: 'a1', qid: 'q2' });
+  assert.strictEqual(res.status, 502);
+  assert.deepStrictEqual(res.body, { error: 'socratic_filter' });
+  assert.strictEqual(calls.turns.length, 0);
+  socratic._setRepo(require('../lib/repo'));
+});
+
+test('leaksEtalon: ≥4 слов эталона подряд — отклоняется', () => {
+  assert.strictEqual(socratic.leaksEtalon('Почему доктор оказался ещё и добрым человеком?', 'Чудесный доктор оказался ещё и добрым человеком.'), true);
 });
 
 test('ask: 5-й шаг → 429 socratic_limit, ЛЛМ не вызывается', async () => {

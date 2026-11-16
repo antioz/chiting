@@ -1,7 +1,7 @@
 // Сократовский цикл (task-7): наводящие вопросы по нулевым ответам (shared inquiry).
 // Работает только для attempt в статусе socratic и только по qid из zero_qids (иначе 409).
 // Шагов на qid — не больше C.socraticMaxSteps; вызовы ЛЛМ идут в общий лимит C.llmCallsLimit.
-// Пост-фильтр: сгенерированный вопрос не должен содержать куски эталона (иначе повтор, макс 2).
+// Пост-фильтр: сгенерированный вопрос не должен выдавать содержание эталона (иначе повтор, макс 3).
 const C = require('../config');
 const prompts = require('../prompts');
 const rubric = require('../rubric');
@@ -9,19 +9,37 @@ let llm = require('../llm');       // seam для тестов: setLlm(mockFn)
 let repo = require('../repo');     // seam для тестов: _setRepo(mock)
 
 const CRITERIA_NAMES = ['Соответствие форме задания', 'Точность (пересказ не подменяет смысл)', 'Привязка к тексту', 'Свои слова (нет копии слов автора)', 'Осмысленность'];
-const GENERATION_TRIES = 3; // 1 основная + 2 повтора после отклонения фильтром
+const GENERATION_TRIES = 4; // 1 основная + 3 повтора после отклонения фильтром (yandexgpt-lite нестабилен)
 
 function safeParse(j, dflt) { try { return typeof j === 'string' ? JSON.parse(j) : (j || dflt); } catch { return dflt; } }
 
-// Проверка пост-фильтра: вопрос не равен эталону и не содержит смысловых кусков эталона
-// (слова длиннее 5 символов; регистронезависимое вхождение кусков длиной ≥ 6 символов).
+// Проверка пост-фильтра: вопрос не должен ВЫДАВАТЬ эталонное содержание.
+// Отклоняем, только если вопрос содержит: (1) эталон целиком как подстроку,
+// (2) кусок эталона длиной ≥ 25 символов (по словам), (3) ≥ 4 слов эталона
+// подряд. Одиночное ключевое слово из эталона (уровень П5: «что значит слово X»)
+// законно — не отклоняем.
 function leaksEtalon(question, etalon) {
-  const q = String(question || '').toLowerCase().trim();
-  const e = String(etalon || '').toLowerCase().trim();
+  const norm = s => String(s || '').toLowerCase().replace(/[^a-zа-яё0-9]+/g, ' ').trim();
+  const q = norm(question);
+  const e = norm(etalon);
   if (!q || !e) return false;
-  if (q === e) return true;
-  const chunks = e.split(/[^a-zа-яё0-9]+/i).filter(w => w.length > 5 && w.length >= 6);
-  return chunks.some(c => q.includes(c));
+  if (q.includes(e)) return true;
+  const qw = q.split(' ');
+  const ew = e.split(' ');
+  // (2) кусок эталона ≥ 25 символов — наращиваем окно по словам эталона
+  for (let i = 0; i < ew.length; i++) {
+    let buf = '';
+    for (let j = i; j < ew.length; j++) {
+      buf = buf ? `${buf} ${ew[j]}` : ew[j];
+      if (buf.length >= 25 && q.includes(buf)) return true;
+      if (buf.length >= 80) break;
+    }
+  }
+  // (3) ≥ 4 слов эталона подряд
+  for (let i = 0; i + 4 <= ew.length; i++) {
+    if (q.includes(ew.slice(i, i + 4).join(' '))) return true;
+  }
+  return false;
 }
 
 // Нулевые критерии по qid — из последнего pack-ревью (criteria == 0). Не распарсилось — все пять.
