@@ -75,6 +75,8 @@ async function addLlmReview(r) {
   );
 }
 // Итог ревью пакета: статус (socratic/reflection) + marks_json {qid:{mark,total,explanation}} + zero_qids_json.
+// Пакетный review больше НЕ ставит status='socratic' (task-14): status в body ответа —
+// фактическое значение, в БД пишется answering. zero_qids_json остаётся для админки/отладки.
 async function updateAttemptReview(id, r) {
   await execute(
     'UPDATE attempts SET status = $s, marks_json = $m, zero_qids_json = $z, updated_at = $ua WHERE id = $i',
@@ -82,7 +84,43 @@ async function updateAttemptReview(id, r) {
   );
 }
 
-// --- контент уровней ---
+// --- пошаговое ревью (task-14) ---
+// Накопление marks по qid: marks_json мерджится нами в хендлере (REPLACE всего поля),
+// zero_qids_json пакетного review не трогаем.
+async function updateAttemptMarks(id, r) {
+  await execute(
+    'UPDATE attempts SET status = $s, marks_json = $m, updated_at = $ua WHERE id = $i',
+    { $s: db.V.s(r.status), $m: db.V.j(r.marks_json || {}), $ua: db.V.u64(r.updated_at || Date.now()), $i: db.V.s(id) }
+  );
+}
+// Последнее question-ревью конкретного qid: оттуда criteria нулевого вопроса для сократа.
+async function getLastQuestionReview(attemptId, qid) {
+  const rs = await execute(
+    'SELECT * FROM llm_reviews WHERE attempt_id = $a AND scope = $s AND qid = $q ORDER BY created_at DESC LIMIT 1',
+    { $a: db.V.s(attemptId), $s: db.V.s('question'), $q: db.V.s(qid) }
+  );
+  return rs[0] && rs[0][0];
+}
+// Сколько раз подряд qid получал mark 0: идём по событиям attempt от новых к старым.
+// q_zero с этим qid — плюс к счёту; q_review с этим qid и mark=0 — часть серии, пропуск
+// (не обрывает); любое другое событие (q_review с mark>0, другой qid, другое type) —
+// остановка. События append-only, порядок по t монотонен в пределах инстанса.
+async function countConsecutiveQZero(attemptId, qid) {
+  const events = await listEvents(attemptId);
+  let n = 0;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e.type === 'q_zero') {
+      const p = safeParse(e.payload_json, {});
+      if (p.qid !== qid) break;
+      n++;
+    } else if (e.type === 'q_review') {
+      const p = safeParse(e.payload_json, {});
+      if (p.qid !== qid || Number(p.mark) !== 0) break; // mark>0 обрывает серию
+    } else break;
+  }
+  return n;
+}
 // join levels + rules + texts; questions_json — массив вопросов (§3.3 методологии).
 async function levels() {
   const rs = await execute(
@@ -300,4 +338,4 @@ async function createInvite(code, limit) {
 
 function safeParse(j, dflt) { try { return typeof j === 'string' ? JSON.parse(j) : (j || dflt); } catch { return dflt; } }
 
-module.exports = { execute, getUserByLogin, createUser, inviteUse, waitlistAdd, levels, answerBases, lastApprovedAttempt, getLevel, getAttempt, createAttempt, upsertAnswer, getAnswers, setAttemptStatus, addEvent, getText, countLlmReviews, addLlmReview, updateAttemptReview, countSocraticTurns, addSocraticTurn, getSocraticTurns, getLastLlmReview, addReflectionAnswer, getReflectionAnswers, createCoupon, getCouponByAttempt, listCoupons, listUserAttempts, bumpIterations, listEvents, lastOpenAttempt, getUserById, listUsers, listAttemptsAdmin, listLlmReviewsByAttempt, listAllLlmReviews, listWaitlist, getWaitlist, setWaitlistStatus, createInvite };
+module.exports = { execute, getUserByLogin, createUser, inviteUse, waitlistAdd, levels, answerBases, lastApprovedAttempt, getLevel, getAttempt, createAttempt, upsertAnswer, getAnswers, setAttemptStatus, addEvent, getText, countLlmReviews, addLlmReview, updateAttemptReview, updateAttemptMarks, getLastQuestionReview, countConsecutiveQZero, countSocraticTurns, addSocraticTurn, getSocraticTurns, getLastLlmReview, addReflectionAnswer, getReflectionAnswers, createCoupon, getCouponByAttempt, listCoupons, listUserAttempts, bumpIterations, listEvents, lastOpenAttempt, getUserById, listUsers, listAttemptsAdmin, listLlmReviewsByAttempt, listAllLlmReviews, listWaitlist, getWaitlist, setWaitlistStatus, createInvite };

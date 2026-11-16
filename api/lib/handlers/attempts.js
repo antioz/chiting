@@ -26,18 +26,22 @@ async function create({ user, level_id, stake }) {
 }
 
 // answers: [{qid, text, keydown, pasted, t_answer}] — одна запись на qid, повторная отправка перезаписывает.
-async function answers({ user, id, answers: ans }) {
+// Пошаговый флоу (task-14): принимаем и одиночный ответ answer {qid, text, keydown, pasted, t_answer}
+// (UPSERT одного qid). Античит на одиночном ответе — только pasted/typedRatio на нём самом.
+async function answers({ user, id, answers: ans, answer }) {
   const attempt = await repo.getAttempt(id);
   if (!attempt || attempt.user_id !== user.id) return { status: 404, body: { error: 'not_found' } };
   if (!EDITABLE_STATUSES.has(attempt.status)) return { status: 409, body: { error: 'not_editable' } };
-  if (!Array.isArray(ans) || ans.length === 0 || ans.some(a => !a || !a.qid)) {
+  const list = Array.isArray(ans) ? ans : (answer && typeof answer === 'object' ? [answer] : null);
+  if (!list || list.length === 0 || list.some(a => !a || !a.qid)) {
     return { status: 400, body: { error: 'validation' } };
   }
-  if (anticheat.isSuspicious(ans)) {
-    await repo.addEvent(user.id, id, 'anticheat_flag', { reason: 'suspicious', qids: ans.map(a => a.qid) }, Date.now());
+  const suspicious = list.length === 1 ? anticheat.isSuspiciousSingle(list[0]) : anticheat.isSuspicious(list);
+  if (suspicious) {
+    await repo.addEvent(user.id, id, 'anticheat_flag', { reason: 'suspicious', qids: list.map(a => a.qid) }, Date.now());
     return { status: 422, body: { error: 'suspicious' } };
   }
-  for (const a of ans) await repo.upsertAnswer(id, a);
+  for (const a of list) await repo.upsertAnswer(id, a);
   await repo.setAttemptStatus(id, 'answering', Date.now());
   return { body: { ok: true, status: 'answering' } };
 }

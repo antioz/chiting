@@ -74,20 +74,20 @@ test('pack: без нулей → status reflection, marks по каждому �
   assert.match(lastPrompt, /Абзац один/, 'текст произведения должен попадать в промпт');
 });
 
-test('pack: ноль по q2 → status socratic + zero_qids', async () => {
+test('pack: ноль по q2 → status answering (socratic больше не ставится) + zero_qids', async () => {
   const { repo } = makeRepo();
   review._setRepo(repo);
   review.setLlm(mockLlm(LLM_WITH_ZERO));
   const res = await review.pack({ user: USER, id: 'a1' });
   review._setRepo(require('../lib/repo'));
-  assert.strictEqual(res.body.status, 'socratic');
+  assert.strictEqual(res.body.status, 'answering');
   assert.deepStrictEqual(res.body.zero_qids, ['q2']);
   assert.strictEqual(res.body.marks.q2.mark, 0);
   assert.strictEqual(res.body.marks.q2.total, 0);
 });
 
-test('pack: лимит 12 вызовов → 429 llm_limit, ЛЛМ не вызывается', async () => {
-  const { repo } = makeRepo({ countLlmReviews: async () => 12 });
+test('pack: лимит 16 вызовов → 429 llm_limit, ЛЛМ не вызывается', async () => {
+  const { repo } = makeRepo({ countLlmReviews: async () => 16 });
   review._setRepo(repo);
   let called = 0;
   review.setLlm(async () => { called++; return { text: '' }; });
@@ -195,11 +195,11 @@ test('reflect: три повторных вызова → три строки ll
   assert.strictEqual(count, 3, 'countLlmReviews = истинное число вызовов');
 });
 
-test('reflect: countLlmReviews=12 → 429 llm_limit, ЛЛМ не вызывается', async () => {
+test('reflect: countLlmReviews=16 → 429 llm_limit, ЛЛМ не вызывается', async () => {
   const finish = require('../lib/handlers/finish');
   const repo = {
     getAttempt: async () => ({ id: 'a1', user_id: 'u1', level_id: 'lvl1', status: 'reflection' }),
-    countLlmReviews: async () => 12,
+    countLlmReviews: async () => 16,
     addLlmReview: async () => { throw new Error('не должен писать'); },
   };
   finish._setRepo(repo);

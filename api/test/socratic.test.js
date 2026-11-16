@@ -130,8 +130,8 @@ test('ask: 5-й шаг → 429 socratic_limit, ЛЛМ не вызывается'
   socratic._setRepo(require('../lib/repo'));
 });
 
-test('ask: суммарный лимит 12 LLM-вызовов → 429 llm_limit', async () => {
-  const { repo } = makeRepo({ countLlmReviews: async () => 12 });
+test('ask: суммарный лимит 16 LLM-вызовов → 429 llm_limit', async () => {
+  const { repo } = makeRepo({ countLlmReviews: async () => 16 });
   socratic._setRepo(repo);
   let called = 0;
   socratic.setLlm(async () => { called++; return { text: 'вопрос' }; });
@@ -142,10 +142,10 @@ test('ask: суммарный лимит 12 LLM-вызовов → 429 llm_limit
   socratic._setRepo(require('../lib/repo'));
 });
 
-test('ask: count=11 на входе, первый вопрос с эталоном → 429 llm_limit на 2-й итерации, ЛЛМ вызван 1 раз', async () => {
+test('ask: count=15 на входе, первый вопрос с эталоном → 429 llm_limit на 2-й итерации, ЛЛМ вызван 1 раз', async () => {
   const { repo, calls } = makeRepo();
   // Счётчик как в боевом репо: addLlmReview реально увеличивает countLlmReviews.
-  let count = 11;
+  let count = 15;
   repo.countLlmReviews = async () => count;
   repo.addLlmReview = async (...args) => { count++; calls.reviews.push(args); };
   socratic._setRepo(repo);
@@ -154,7 +154,7 @@ test('ask: count=11 на входе, первый вопрос с эталоно
   const res = await socratic.ask({ user: USER, id: 'a1', qid: 'q2' });
   assert.strictEqual(res.status, 429);
   assert.deepStrictEqual(res.body, { error: 'llm_limit' });
-  assert.strictEqual(llmCalls, 1, 'перед 2-й итерацией лимит (11+1=12) перепроверен — второй вызов не делается');
+  assert.strictEqual(llmCalls, 1, 'перед 2-й итерацией лимит (15+1=16) перепроверен — второй вызов не делается');
   assert.strictEqual(calls.reviews.length, 1);
   socratic._setRepo(require('../lib/repo'));
 });

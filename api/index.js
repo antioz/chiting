@@ -30,11 +30,18 @@ routes.health = async () => ({ body: { ok: true, rubric_version: C.rubricVersion
 
 // Attempt-контур: создание, приём ответов, события чтения. Все — только со своим attempt (иначе 404).
 routes['attempt-create'] = (p, ctx) => attempts.create({ user: ctx.user, level_id: p.level_id, stake: p.stake });
-routes['attempt-answers'] = (p, ctx) => attempts.answers({ user: ctx.user, id: p.id, answers: p.answers });
+routes['attempt-answers'] = (p, ctx) => attempts.answers({ user: ctx.user, id: p.id, answers: p.answers, answer: p.answer });
 routes['attempt-event'] = (p, ctx) => attempts.event({ user: ctx.user, id: p.id, type: p.type, payload: p.payload });
 
-// Оценка пакета ответов ЛЛМ (task-6): лимит llmCallsLimit вызовов на attempt, статус socratic/reflection.
+// Оценка пакета ответов ЛЛМ (task-6): лимит llmCallsLimit вызовов на attempt.
+// task-14: из обязательного пути УБРАН — остаётся для админки/отладки, status='socratic'
+// больше НЕ выставляет (attempt ходит answering ↔ reflection).
 routes['review'] = (p, ctx) => review.pack({ user: ctx.user, id: p.id });
+
+// Пошаговое ревью одного вопроса (task-14): один вызов ЛЛМ, marks накапливаются в
+// marks_json, все in_scope qid с mark>=1 → status='reflection'. Ответ: {qid, mark,
+// explanation, attempts_on_qid} (подряд идущие mark=0; фронт зовёт сократа при >= 2).
+routes['review-question'] = (p, ctx) => review.question({ user: ctx.user, id: p.id, qid: p.qid });
 
 // Сократовский цикл (task-7): наводящие вопросы по нулевым ответам и ответы ребёнка на них.
 // Финальный переписанный ответ ребёнок отправляет через attempt-answers + повторный review.

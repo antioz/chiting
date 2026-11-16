@@ -1,7 +1,9 @@
-// Сократовский цикл (task-7): наводящие вопросы по нулевым ответам (shared inquiry).
-// Работает только для attempt в статусе socratic и только по qid из zero_qids (иначе 409).
-// Шагов на qid — не больше C.socraticMaxSteps; вызовы ЛЛМ идут в общий лимит C.llmCallsLimit.
-// Пост-фильтр: сгенерированный вопрос не должен выдавать содержание эталона (иначе повтор, макс 3).
+// Сократовский цикл (task-7, task-14): наводящие вопросы по нулевым ответам (shared inquiry).
+// Допуск: status в ('answering','socratic') И qid имеет mark 0 (marks_json от пошагового
+// review-question, zero_qids_json от пакетного review-ответа, либо есть подряд идущие
+// события q_zero). Шагов на qid — не больше C.socraticMaxSteps; вызовы ЛЛМ идут в общий
+// лимит C.llmCallsLimit. Пост-фильтр: сгенерированный вопрос не должен выдавать содержание
+// эталона (иначе повтор, макс 3). Подключается со ВТОРОЙ неудачи подряд — решает фронт.
 const C = require('../config');
 const prompts = require('../prompts');
 const rubric = require('../rubric');
@@ -57,8 +59,15 @@ function isBadSocraticQuestion(q) {
   return false;
 }
 
-// Нулевые критерии по qid — из последнего pack-ревью (criteria == 0). Не распарсилось — все пять.
+// Нулевые критерии по qid — из последнего question-ревью этого qid (пошаговый флоу,
+// task-14), fallback — последнее pack-ревью. Не распарсилось — все пять.
 async function zeroCriteriaFor(id, qid) {
+  try {
+    const qr = await repo.getLastQuestionReview(id, qid);
+    const p = safeParse(qr && qr.response_json, {});
+    const single = rubric.parseLlmJson(p.text || '');
+    if (single) return single.criteria.map((v, i) => (v === 0 ? CRITERIA_NAMES[i] : null)).filter(Boolean);
+  } catch { /* ниже — запасной вариант */ }
   try {
     const row = await repo.getLastLlmReview(id, 'pack');
     const results = rubric.parseLlmResults(safeParse(row && row.response_json, {}).text || '');
@@ -68,12 +77,26 @@ async function zeroCriteriaFor(id, qid) {
   return CRITERIA_NAMES.slice();
 }
 
+// qid «нулевой», если: marks_json[qid].mark === 0 (пошаговый review-question), либо qid в
+// zero_qids_json пакетного review, либо есть подряд идущие события q_zero по этому qid.
+async function qidIsZero(attempt, id, qid) {
+  const marks = safeParse(attempt.marks_json, {});
+  if (marks[qid] && Number(marks[qid].mark) === 0) return true;
+  const zq = safeParse(attempt.zero_qids_json, []);
+  if (Array.isArray(zq) && zq.includes(qid)) return true;
+  try {
+    if ((await repo.countConsecutiveQZero(id, qid)) > 0) return true;
+  } catch { /* репо без этой функции (моки старых тестов) — остальные признаки выше */ }
+  return false;
+}
+
 async function ask({ user, id, qid }) {
   const attempt = await repo.getAttempt(id);
   if (!attempt || attempt.user_id !== user.id) return { status: 404, body: { error: 'not_found' } };
-  if (attempt.status !== 'socratic') return { status: 409, body: { error: 'not_socratic' } };
-  const zeroQids = safeParse(attempt.zero_qids_json, []);
-  if (!zeroQids.includes(qid)) return { status: 409, body: { error: 'not_zero_qid' } };
+  if (attempt.status !== 'answering' && attempt.status !== 'socratic') {
+    return { status: 409, body: { error: 'not_socratic' } };
+  }
+  if (!(await qidIsZero(attempt, id, qid))) return { status: 409, body: { error: 'not_zero_qid' } };
   if ((await repo.countSocraticTurns(id, qid)) >= C.socraticMaxSteps) {
     return { status: 429, body: { error: 'socratic_limit' } };
   }
@@ -131,9 +154,10 @@ async function ask({ user, id, qid }) {
 async function answer({ user, id, qid, text }) {
   const attempt = await repo.getAttempt(id);
   if (!attempt || attempt.user_id !== user.id) return { status: 404, body: { error: 'not_found' } };
-  if (attempt.status !== 'socratic') return { status: 409, body: { error: 'not_socratic' } };
-  const zeroQids = safeParse(attempt.zero_qids_json, []);
-  if (!zeroQids.includes(qid)) return { status: 409, body: { error: 'not_zero_qid' } };
+  if (attempt.status !== 'answering' && attempt.status !== 'socratic') {
+    return { status: 409, body: { error: 'not_socratic' } };
+  }
+  if (!(await qidIsZero(attempt, id, qid))) return { status: 409, body: { error: 'not_zero_qid' } };
   const turns = await repo.getSocraticTurns(id, qid);
   const last = turns[turns.length - 1];
   if (!last) return { status: 409, body: { error: 'no_question' } };
@@ -148,4 +172,4 @@ async function answer({ user, id, qid, text }) {
 function _setRepo(r) { repo = r; }
 function setLlm(fn) { llm = { complete: fn }; }
 
-module.exports = { ask, answer, _setRepo, setLlm, leaksEtalon, isBadSocraticQuestion };
+module.exports = { ask, answer, _setRepo, setLlm, leaksEtalon, isBadSocraticQuestion, qidIsZero };

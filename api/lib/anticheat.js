@@ -7,4 +7,12 @@ function isSuspicious(answers) {
   if (texts.some((t, i) => t.length > 40 && (answers[i].pasted || typedRatio(answers[i]) < 0.9))) return true;
   return false;
 }
-module.exports = { typedRatio, isSuspicious };
+// Пошаговый флоу (task-14): одиночный ответ проверяем только на вставку/скорость печати —
+// сравнивать с другими вопросами не с чем (uniq-эвристика пакета здесь неприменима).
+function isSuspiciousSingle(a) {
+  const t = (a.text || '').trim();
+  if (!t) return true;
+  if (t.length > 40 && (a.pasted || typedRatio(a) < 0.9)) return true;
+  return false;
+}
+module.exports = { typedRatio, isSuspicious, isSuspiciousSingle };

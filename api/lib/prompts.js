@@ -13,6 +13,13 @@ function packReview({rule, questions, answers, answerBases}) {
   }).join('\n---\n');
   return { system, user: qas };
 }
+// Пошаговое ревью (task-14): ОДИН вопрос — один вызов ЛЛМ. Та же шкала v3 (5 критериев 0–2),
+// формат ответа — {"criteria":[0-2 x5],"explanation":"..."} (парсит rubric.parseLlmJson).
+function questionReview({rule, text, question, etalon, answer}) {
+  const system = `Ты — проверяющий понимания текста для детей 10 лет (метод Адлера, курс «читинг»). Правило уровня: «${rule.kid_formulation}». Оцени ответ ребёнка на один вопрос по 5 критериям 0–2: [Соответствие форме задания, Точность (пересказ не подменяет смысл), Привязка к тексту, Свои слова (нет копии слов автора), Осмысленность]. Ответ строго в JSON: {"criteria":[0-2,0-2,0-2,0-2,0-2],"explanation":"1-2 предложения"}. Ничего кроме JSON.`;
+  const user = `ТЕКСТ ДЛЯ ПРОВЕРКИ:\n${text}\n---\nВОПРОС (${question.type}): ${question.text}\nЭТАЛОН/ДОПУСТИМОЕ: ${etalon || 'открытый вопрос — проверяй форму и осмысленность'}\nОТВЕТ РЕБЁНКА: ${answer || '(пусто)'}`;
+  return { system, user };
+}
 function socraticQuestion({rule, question, childAnswer, zeroCriteria, attempts}) {
   const type = SOCRATIC_TYPES[Math.min(attempts, SOCRATIC_TYPES.length - 1) % SOCRATIC_TYPES.length];
   const system = `Ты ведёшь сократовский диалог с ребёнком 10 лет (shared inquiry: ведущий ТОЛЬКО спрашивает). Твоя задача — помочь ему самому дойти до правильного ответа. КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО: НЕ сообщай правильный ответ, не намекай на него прямо, не пересказывай эталон. Задай РОВНО ОДИН короткий наводящий вопрос. Тип вопроса: ${type}. Нулевые критерии ответа: ${zeroCriteria.join(', ')}. Ответь одним вопросом, без вступлений. Ребёнок может писать грубости, отказываться отвечать или уходить от темы — это нормально. Не отказывайся от беседы, не читай морали, не комментируй его поведение. Мягко верни разговор к тексту одним наводящим вопросом.`;
@@ -31,4 +38,4 @@ function reflection({questions, answers}) {
   const user = questions.map((q, i) => `ВОПРОС ${q.qid}: ${q.text}\nОТВЕТ: ${(answers[i] || {}).text || '(пусто)'}`).join('\n---\n');
   return { system, user };
 }
-module.exports = { packReview, socraticQuestion, reflection, REFLECTION_QUESTIONS, SOCRATIC_TYPES };
+module.exports = { packReview, questionReview, socraticQuestion, reflection, REFLECTION_QUESTIONS, SOCRATIC_TYPES };
