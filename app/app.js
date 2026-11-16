@@ -176,7 +176,8 @@ function initAuth() {
       const name = $('#auth-name').value.trim();
       const password = $('#auth-password').value;
       if (S.mode === 'register') {
-        const invite = $('#auth-invite').value.trim();
+        const invite = $('#auth-invite').value.trim().toUpperCase();
+        if (!invite) throw new Error('Введи код приглашения — его дал взрослый (например: TEST-10).');
         const r = await api('register', { name, password, invite });
         localStorage.setItem(TOKEN_KEY, r.token);
       } else {
@@ -231,16 +232,18 @@ function renderLevels() {
       stakeWrap.append(input, cur);
       const btn = el('button', 'btn btn-primary', 'Начать');
       btn.onclick = async () => {
-        const stake = parseInt(input.value, 10);
-        if (!Number.isInteger(stake) || stake < 1 || stake > 100000) {
-          input.style.borderColor = 'var(--red)';
-          return;
-        }
         btn.disabled = true;
         try {
           if (lv.split && lv.split.attempt_id) {
+            // Продолжение после разбивки: ставка уже задана в открытом attempt — валидация input не нужна (M2).
             await loadAttempt(lv.split.attempt_id);
           } else {
+            const stake = parseInt(input.value, 10);
+            if (!Number.isInteger(stake) || stake < 1 || stake > 100000) {
+              input.style.borderColor = 'var(--red)';
+              btn.disabled = false;
+              return;
+            }
             const r = await api('attempt-create', { level_id: lv.id, stake });
             await loadAttempt(r.attempt.id);
           }

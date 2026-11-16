@@ -12,7 +12,12 @@ const admin = require('./lib/handlers/admin');
 const exportReport = require('./lib/export');
 
 // SECRET из env функции; jwt.init при холодном старте (index.js грузится один раз на инстанс).
-jwt.init(process.env.SECRET || C.secret);
+// Fail-fast: без SECRET функция не стартует с известным dev-секретом (I3) — кроме тестов (env выставлен в test/).
+if (!process.env.SECRET) {
+  console.error('FATAL: SECRET env is not set — function refuses to start');
+  throw new Error('SECRET env is required');
+}
+jwt.init(process.env.SECRET);
 
 const routes = {}; // a -> async (params, ctx) => obj|Response
 
@@ -95,7 +100,7 @@ async function handler(event) {
   const headersLow = {};
   for (const k of Object.keys(headersRaw)) headersLow[k.toLowerCase()] = headersRaw[k];
   const origin = headersLow['origin'] || '';
-  const cors = C.siteOrigins.some(o => origin.startsWith(o)) ? origin : C.siteOrigins[0];
+  const cors = C.siteOrigins.includes(origin) ? origin : C.siteOrigins[0];
   const headers = { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': cors, 'Access-Control-Allow-Headers': 'Authorization,Content-Type,X-Auth-Token', 'Access-Control-Allow-Methods': '*' };
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
   try {

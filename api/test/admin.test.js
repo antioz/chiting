@@ -6,6 +6,8 @@ const path = require('path');
 
 // db.ready подменяем ДО require('../index') — index делает const { ready } = require('./lib/db')
 // и ловит значение в момент загрузки. Дальше handler идёт по маршрутам с мокнутым repo.
+// SECRET нужен: index.js fail-fast при холодном старте без env (I3).
+process.env.SECRET = process.env.SECRET || 'test-secret';
 require('../lib/db');
 require.cache[require.resolve('../lib/db')].exports.ready = async () => {};
 const { handler } = require('../index');

@@ -88,6 +88,29 @@ test('answers: чужой attempt → 404', async () => {
   assert.deepStrictEqual(res.body, { error: 'not_found' });
 });
 
+test('answers: approved attempt → 409 not_editable, ответы не перезаписаны, статус не изменился (M1)', async () => {
+  const { repo, calls } = makeRepo({ getAttempt: async () => ({ id: 'a1', user_id: 'u1', level_id: 'lvl-p2-vanka', status: 'approved' }) });
+  attempts._setRepo(repo);
+  const res = await attempts.answers({ user: USER, id: 'a1', answers: GOOD });
+  attempts._setRepo(require('../lib/repo'));
+  assert.strictEqual(res.status, 409);
+  assert.deepStrictEqual(res.body, { error: 'not_editable' });
+  assert.strictEqual(calls.answers.length, 0, 'ответы на approved не пишутся');
+  assert.strictEqual(calls.updates.length, 0, 'статус approved не трогается');
+  assert.strictEqual(calls.events.length, 0);
+});
+
+test('answers: reflection attempt → 409 not_editable (M1)', async () => {
+  const { repo, calls } = makeRepo({ getAttempt: async () => ({ id: 'a1', user_id: 'u1', level_id: 'lvl-p2-vanka', status: 'reflection' }) });
+  attempts._setRepo(repo);
+  const res = await attempts.answers({ user: USER, id: 'a1', answers: GOOD });
+  attempts._setRepo(require('../lib/repo'));
+  assert.strictEqual(res.status, 409);
+  assert.deepStrictEqual(res.body, { error: 'not_editable' });
+  assert.strictEqual(calls.answers.length, 0);
+  assert.strictEqual(calls.updates.length, 0);
+});
+
 test('event: whitelist — read_start ok, мусор → 400', async () => {
   const { repo, calls } = makeRepo();
   attempts._setRepo(repo);

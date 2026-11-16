@@ -5,6 +5,8 @@ const anticheat = require('../anticheat');
 let repo = require('../repo'); // seam для тестов: _setRepo подставляет мок (см. test/attempts.test.js)
 
 const EVENT_TYPES = new Set(['read_start', 'read_end', 'switch', 'hint', 'anticheat_flag']);
+// Ответы принимаем только в редактируемых статусах: approved/reflection не затираются (M1).
+const EDITABLE_STATUSES = new Set(['reading', 'answering', 'socratic']);
 const STAKE_MIN = 1, STAKE_MAX = 100000;
 
 async function create({ user, level_id, stake }) {
@@ -27,6 +29,7 @@ async function create({ user, level_id, stake }) {
 async function answers({ user, id, answers: ans }) {
   const attempt = await repo.getAttempt(id);
   if (!attempt || attempt.user_id !== user.id) return { status: 404, body: { error: 'not_found' } };
+  if (!EDITABLE_STATUSES.has(attempt.status)) return { status: 409, body: { error: 'not_editable' } };
   if (!Array.isArray(ans) || ans.length === 0 || ans.some(a => !a || !a.qid)) {
     return { status: 400, body: { error: 'validation' } };
   }
