@@ -42,7 +42,10 @@ async function pack({ user, id }) {
     answerBases: bases,
   });
   // Текст целиком нужен ЛЛМ для критерия «Свои слова (нет копии слов автора)» и привязки к местам.
-  const withText = `ТЕКСТ ДЛЯ ПРОВЕРКИ:\n${flattenBody(text && text.body_json)}\n---\n${userPrompt}`;
+  // Разбивка (task-9): attempt после split читает мини-текст фрагмента — проверяем его.
+  const ov = safeParse(attempt.text_override, null);
+  const textBody = ov ? ov.text : flattenBody(text && text.body_json);
+  const withText = `ТЕКСТ ДЛЯ ПРОВЕРКИ:\n${textBody}\n---\n${userPrompt}`;
 
   let out = await llm.complete(system, withText);
   let results = rubric.parseLlmResults(out.text);

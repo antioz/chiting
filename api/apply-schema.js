@@ -17,7 +17,8 @@ const { ready, query, getDriver } = require('./lib/db');
     try {
       await d.queryClient.do({ fn: async sess => { await sess.execute({ text: s }); } });
     } catch (e) {
-      if (/path exist/i.test(String(e))) { console.log('exists:', s.slice(0, 60)); continue; }
+      // CREATE TABLE существующей таблицы / ALTER ADD COLUMN существующей колонки — не ошибка.
+      if (/path exist|already exist|duplicated/i.test(String(e && e.message))) { console.log('exists:', s.slice(0, 60)); continue; }
       throw e;
     }
     console.log('ok:', s.slice(0, 60));

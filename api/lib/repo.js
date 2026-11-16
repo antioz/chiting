@@ -120,8 +120,8 @@ async function getAttempt(id) {
 }
 async function createAttempt(a) {
   await execute(
-    'INSERT INTO attempts (id, user_id, level_id, stake, status, pass_number, socratic_count, iterations, created_at, updated_at) VALUES ($id, $u, $l, $st, $s, $pn, $sc, $it, $ca, $ua)',
-    { $id: db.V.s(a.id), $u: db.V.s(a.user_id), $l: db.V.s(a.level_id), $st: db.V.u32(a.stake), $s: db.V.s(a.status), $pn: db.V.u32(a.pass_number), $sc: db.V.u32(a.socratic_count), $it: db.V.u32(a.iterations), $ca: db.V.u64(a.created_at), $ua: db.V.u64(a.updated_at) }
+    'INSERT INTO attempts (id, user_id, level_id, stake, status, pass_number, socratic_count, iterations, text_override, created_at, updated_at) VALUES ($id, $u, $l, $st, $s, $pn, $sc, $it, $to, $ca, $ua)',
+    { $id: db.V.s(a.id), $u: db.V.s(a.user_id), $l: db.V.s(a.level_id), $st: db.V.u32(a.stake), $s: db.V.s(a.status), $pn: db.V.u32(a.pass_number), $sc: db.V.u32(a.socratic_count), $it: db.V.u32(a.iterations), $to: db.V.s(a.text_override || ''), $ca: db.V.u64(a.created_at), $ua: db.V.u64(a.updated_at) }
   );
 }
 // Одна запись на (attempt_id, qid): повторная отправка перезаписывает ответ.
@@ -189,6 +189,28 @@ async function getLastLlmReview(attemptId, scope) {
   return rs[0] && rs[0][0];
 }
 
+// --- лестница итераций (task-9) ---
+// Итерации считаются на attempt; next() инкрементит, на пороге — split (новый attempt).
+async function bumpIterations(id, n, now) {
+  await execute(
+    'UPDATE attempts SET iterations = $n, updated_at = $ua WHERE id = $i',
+    { $n: db.V.u32(n), $ua: db.V.u64(now || Date.now()), $i: db.V.s(id) }
+  );
+}
+// События attempt (hint-ротация, split, журнал пути участника).
+async function listEvents(attemptId) {
+  const rs = await execute('SELECT * FROM events WHERE attempt_id = $a', { $a: db.V.s(attemptId) });
+  return rs[0] || [];
+}
+// Последний незакрытый attempt пользователя на уровне (для /levels: пометка разбивки).
+async function lastOpenAttempt(userId, levelId) {
+  const rs = await execute(
+    "SELECT * FROM attempts WHERE user_id = $u AND level_id = $l AND status != 'approved' ORDER BY created_at DESC LIMIT 1",
+    { $u: db.V.s(userId), $l: db.V.s(levelId) }
+  );
+  return rs[0] && rs[0][0];
+}
+
 // --- рефлексия и купоны (task-8) ---
 // Одна запись на (attempt_id, qid): повторный reflect (ребёнок переписал нулевые) — REPLACE.
 // question_text/answer_text/explanation — для полного отчёта админки по прохождению.
@@ -227,4 +249,4 @@ async function listUserAttempts(userId) {
 
 function safeParse(j, dflt) { try { return typeof j === 'string' ? JSON.parse(j) : (j || dflt); } catch { return dflt; } }
 
-module.exports = { execute, getUserByLogin, createUser, inviteUse, waitlistAdd, levels, answerBases, lastApprovedAttempt, getLevel, getAttempt, createAttempt, upsertAnswer, getAnswers, setAttemptStatus, addEvent, getText, countLlmReviews, addLlmReview, updateAttemptReview, countSocraticTurns, addSocraticTurn, getSocraticTurns, getLastLlmReview, addReflectionAnswer, getReflectionAnswers, createCoupon, getCouponByAttempt, listCoupons, listUserAttempts };
+module.exports = { execute, getUserByLogin, createUser, inviteUse, waitlistAdd, levels, answerBases, lastApprovedAttempt, getLevel, getAttempt, createAttempt, upsertAnswer, getAnswers, setAttemptStatus, addEvent, getText, countLlmReviews, addLlmReview, updateAttemptReview, countSocraticTurns, addSocraticTurn, getSocraticTurns, getLastLlmReview, addReflectionAnswer, getReflectionAnswers, createCoupon, getCouponByAttempt, listCoupons, listUserAttempts, bumpIterations, listEvents, lastOpenAttempt };

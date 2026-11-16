@@ -7,6 +7,7 @@ const attempts = require('./lib/handlers/attempts');
 const review = require('./lib/handlers/review');
 const socratic = require('./lib/handlers/socratic');
 const finish = require('./lib/handlers/finish');
+const iterate = require('./lib/handlers/iterate');
 
 // SECRET из env функции; jwt.init при холодном старте (index.js грузится один раз на инстанс).
 jwt.init(process.env.SECRET || C.secret);
@@ -38,6 +39,13 @@ routes.reflect = (p, ctx) => finish.reflect({ user: ctx.user, id: p.id, answers:
 routes.approve = (p, ctx) => finish.approve({ user: ctx.user, id: p.id });
 routes.coupons = (_p, ctx) => finish.coupons({ user: ctx.user });
 
+// Лестница итераций (task-9): подсказка-крючок доступна ВСЕГДА (методология §3, TZ v4 §3);
+// next считает итерации, на пороге splitThreshold — разбивка на новый attempt с фрагментом.
+routes.hint = (p, ctx) => iterate.hint({ user: ctx.user, id: p.id, qid: p.qid });
+routes.next = (p, ctx) => iterate.next({ user: ctx.user, id: p.id });
+// Текст уровня для фронта: мини-текст фрагмента + пометка split, если attempt — разбивка.
+routes['attempt-get'] = (p, ctx) => iterate.get({ user: ctx.user, id: p.id });
+
 // Список уровней для ребёнка: правило (kid_formulation), текст, delay_hours и доступность
 // по времени последнего approved-прохода (§6 методологии: проход = правило на текст).
 routes.levels = async (_p, ctx) => {
@@ -47,6 +55,15 @@ routes.levels = async (_p, ctx) => {
     const last = await repo.lastApprovedAttempt(ctx.user.id, l.id);
     const delayMs = Number(l.delay_hours) * 3600 * 1000;
     const locked = !!last && (Date.now() - Number(last.updated_at)) < delayMs;
+    // Открытый attempt с разбивкой: фронт показывает мини-текст фрагмента (пометка split).
+    const open = await repo.lastOpenAttempt(ctx.user.id, l.id);
+    let split = null;
+    if (open && open.text_override) {
+      try {
+        const ov = JSON.parse(open.text_override);
+        split = { attempt_id: open.id, pass_number: Number(open.pass_number), fragment_id: ov.fragment_id, fragment_title: ov.fragment_title, text: ov.text };
+      } catch { split = null; }
+    }
     out.push({
       id: l.id, rule_code: l.rule_code, rule: l.rule_kid,
       text_id: l.text_id, text_title: l.text_title, text_author: l.text_author,
@@ -54,6 +71,7 @@ routes.levels = async (_p, ctx) => {
       delay_hours: Number(l.delay_hours),
       available: !locked,
       available_at: locked ? Number(last.updated_at) + delayMs : null,
+      split,
     });
   }
   return { body: { levels: out } };
