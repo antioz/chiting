@@ -51,9 +51,12 @@ async function countLlmReviews(attemptId) {
   return row ? Number(row.n) : 0;
 }
 // Одна запись = один LLM-вызов (pack — один вызов на весь пакет, qid='pack').
+// REPLACE INTO: повторный review после 502 (клиентский ретрай) перезаписывает
+// запись с тем же PK (attempt_id, iteration, scope, qid) — без PK-конфликта,
+// число строк по attempt не растёт → лимит countLlmReviews не ломается.
 async function addLlmReview(r) {
   await execute(
-    `INSERT INTO llm_reviews (attempt_id, iteration, scope, qid, criteria_json, total, final_mark, verdict, explanation,
+    `REPLACE INTO llm_reviews (attempt_id, iteration, scope, qid, criteria_json, total, final_mark, verdict, explanation,
                               rubric_version, request_json, response_json, tokens_in, tokens_out, cost_rub, t_spent, created_at)
      VALUES ($a, $it, $sc, $q, $cj, $to, $fm, $v, $e, $rv, $req, $resp, $ti, $tout, $c, $ts, $ca)`,
     {

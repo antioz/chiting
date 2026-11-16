@@ -122,6 +122,39 @@ test('pack: не-JSON первый раз, валидный JSON в ретрае
   assert.strictEqual(llmCalls, 2);
 });
 
+test('pack: не-JSON → 502, повторный review тем же PK → успех, без 500/PK-конфликта', async () => {
+  const { repo } = makeRepo();
+  review._setRepo(repo);
+  review.setLlm(mockLlm('Просто текст без JSON'));
+  const r1 = await review.pack({ user: USER, id: 'a1' });
+  assert.strictEqual(r1.status, 502);
+  assert.deepStrictEqual(r1.body, { error: 'llm_parse' });
+  // клиент повторяет review: статус attempt остался 'answering', та же итерация и scope='pack'
+  review.setLlm(mockLlm(LLM_OK));
+  const r2 = await review.pack({ user: USER, id: 'a1' });
+  assert.notStrictEqual(r2.status, 500, 'повторный review не падает с internal/PK-конфликтом');
+  assert.notStrictEqual(r2.status, 409, 'статус answering допускает повторный review');
+  assert.strictEqual(r2.body.status, 'reflection');
+});
+
+test('repo: addLlmReview — повторная запись с тем же PK (REPLACE INTO), без конфликта', async () => {
+  const db = require('../lib/db');
+  const realReady = db.ready, realQuery = db.query;
+  const yqlLog = [];
+  db.ready = async () => {};
+  db.query = async (yql) => { yqlLog.push(yql); return [[]]; };
+  try {
+    const repo = require('../lib/repo');
+    const row = { attempt_id: 'a1', iteration: 0, scope: 'pack', qid: 'pack' };
+    await repo.addLlmReview(row);
+    await repo.addLlmReview(row); // повтор после 502 — то же значение PK, не должно быть исключения
+    assert.strictEqual(yqlLog.length, 2);
+    assert.match(yqlLog[0], /^REPLACE INTO llm_reviews/, 'addLlmReview пишет через REPLACE INTO (идемпотентность)');
+  } finally {
+    db.ready = realReady; db.query = realQuery;
+  }
+});
+
 test('pack: чужой attempt → 404; статус не answering → 409', async () => {
   const foreign = makeRepo({ getAttempt: async () => ({ id: 'a1', user_id: 'u2', status: 'answering' }) });
   review._setRepo(foreign.repo);
