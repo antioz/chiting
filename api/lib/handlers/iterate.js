@@ -95,12 +95,23 @@ async function get({ user, id }) {
   const ov = safeParse(attempt.text_override, null);
   const body = safeParse(textRow && textRow.body_json, []);
   const full = body.map(p => (typeof p === 'string' ? p : (p && (p.text || p.body)) || '')).filter(Boolean).join('\n');
+  // Вопросы уровня — контракт с фронтом (task-12): бэкенд — единственный источник.
+  // При split каждый вопрос помечается in_scope (фрагмент разбивки или 'whole').
+  const questions = ((level && level.questions) || []).map(q => ({
+    qid: q.qid,
+    text: q.text,
+    type: q.type,
+    form_spec: q.form_spec || null,
+    fragment_ref: q.fragment_ref || null,
+    ...(ov ? { in_scope: q.fragment_ref === ov.fragment_id || q.fragment_ref === 'whole' } : {}),
+  }));
   return {
     body: {
       attempt,
       text: ov ? ov.text : full,
       split: !!ov,
       fragment: ov ? { id: ov.fragment_id, title: ov.fragment_title } : null,
+      questions,
     },
   };
 }

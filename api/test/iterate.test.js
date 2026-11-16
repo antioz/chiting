@@ -37,6 +37,64 @@ function makeRepo(over = {}) {
 }
 const USER = { id: 'u1', role: 'child' };
 
+test('get: questions из level.questions_json, без split — без флагов in_scope', async () => {
+  const { repo } = makeRepo();
+  iterate._setRepo(repo);
+  const res = await iterate.get({ user: USER, id: 'a1' });
+  iterate._setRepo(require('../lib/repo'));
+  assert.strictEqual(res.status, undefined);
+  assert.strictEqual(res.body.questions.length, 2);
+  assert.deepStrictEqual(res.body.questions[0], {
+    qid: 'q1', text: 'Сожми до одного предложения.', type: 'T2', form_spec: null, fragment_ref: 'whole',
+  });
+  assert.ok(!('in_scope' in res.body.questions[0]), 'без split флага in_scope нет');
+  // Существующие поля не сломаны
+  assert.ok(res.body.attempt && res.body.text && res.body.split === false);
+});
+
+test('get: split — флаги in_scope (фрагмент разбивки + whole)', async () => {
+  const { repo } = makeRepo({
+    getAttempt: async () => ({
+      id: 'a1', user_id: 'u1', level_id: 'lvl-p2-fersman', stake: 50, status: 'reading', pass_number: 2, iterations: 0,
+      text_override: JSON.stringify({ fragment_id: 'f5', fragment_title: 'Крым', text: 'про Крым' }),
+    }),
+  });
+  iterate._setRepo(repo);
+  const res = await iterate.get({ user: USER, id: 'a1' });
+  iterate._setRepo(require('../lib/repo'));
+  const byQid = {};
+  for (const q of res.body.questions) byQid[q.qid] = q;
+  assert.strictEqual(res.body.questions.length, 2, 'все вопросы уровня в ответе');
+  assert.strictEqual(byQid.q1.in_scope, true, 'whole всегда в зоне');
+  assert.strictEqual(byQid.q5.in_scope, true, 'вопрос фрагмента разбивки в зоне');
+});
+
+test('get: split — вопрос другого фрагмента получает in_scope=false', async () => {
+  const level = {
+    ...LEVEL,
+    questions: [
+      { qid: 'q1', type: 'T2', fragment_ref: 'whole', text: 'Сожми.' },
+      { qid: 'q5', type: 'T5', fragment_ref: 'f5', text: 'Согласен?' },
+      { qid: 'q9', type: 'T1', fragment_ref: 'f1', text: 'Вопрос к f1' },
+    ],
+  };
+  const { repo } = makeRepo({
+    levels: async () => [level],
+    getAttempt: async () => ({
+      id: 'a1', user_id: 'u1', level_id: 'lvl-p2-fersman', stake: 50, status: 'reading', pass_number: 2, iterations: 0,
+      text_override: JSON.stringify({ fragment_id: 'f5', fragment_title: 'Крым', text: 'про Крым' }),
+    }),
+  });
+  iterate._setRepo(repo);
+  const res = await iterate.get({ user: USER, id: 'a1' });
+  iterate._setRepo(require('../lib/repo'));
+  const byQid = {};
+  for (const q of res.body.questions) byQid[q.qid] = q;
+  assert.strictEqual(byQid.q9.in_scope, false, 'вопрос чужого фрагмента вне зоны');
+  assert.strictEqual(byQid.q5.in_scope, true);
+  assert.strictEqual(byQid.q1.in_scope, true);
+});
+
 test('hint: формулировки по кругу + событие hint с {qid, idx, text}', async () => {
   const { repo, calls } = makeRepo();
   iterate._setRepo(repo);

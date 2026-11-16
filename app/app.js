@@ -5,8 +5,8 @@
 const API_URL = 'https://functions.yandexcloud.net/d4e52ejg9kvu9arsc2kd';
 const TOKEN_KEY = 'chiting_token';
 
-// Вопросы уровней. Бэкенд НЕ отдаёт questions ни в одном эндпоинте (несостыковка
-// с контрактом) — держим копию из seed-content.js. fragment_ref нужен для split-режима.
+// DEPRECATED (task-12): вопросы теперь отдаёт бэкенд в attempt-get (поле questions).
+// Эта копия — только запасной fallback для старого бэка. Удалить, когда бэк гарантированно новый.
 const LEVEL_QUESTIONS = {
   'lvl-p2-vanka': [
     { qid: 'q1', fragment_ref: 'whole', text: 'Ответь, не заглядывая в текст. Сожми его до одного предложения, начиная со слов «Это письмо о…». Не более 25 слов.' },
@@ -67,6 +67,11 @@ async function api(action, params = {}) {
   }
   let data = null;
   try { data = await resp.json(); } catch { /* пустое тело */ }
+  if (resp.status === 401) {
+    // Единый 401-хендлер: любой запрос с протухшим токеном → сброс сессии и экран входа.
+    sessionExpired();
+    throw new ApiError(401, 'unauthorized', 'Сессия закончилась — войди снова.');
+  }
   if (!resp.ok) {
     throw new ApiError(resp.status, (data && data.error) || 'http_' + resp.status, errorText(resp.status, (data && data.error) || ''));
   }
@@ -88,8 +93,9 @@ function errorText(status, code) {
     not_socratic: 'Сейчас не время сократовского диалога.',
     not_reflection: 'Сначала нужно пройти проверку ответов.',
     reflection_incomplete: 'Сначала допиши рефлексию: все три ответа должны засчитаться.',
-    socratic_limit: 'На этот вопрос подсказки закончились. Попробуй переписать ответ сам.',
-    llm_limit: 'Лимит умных подсказок на эту попытку исчерпан. Попробуй позже.',
+    socratic_limit: 'Давай сделаем паузу и подумаем самостоятельно — ты уже почти у цели.',
+    llm_limit: 'На сегодня вопросов к нейронке хватит — твои ответы уже засчитаны, продолжай писать сам.',
+    socratic_filter: 'Подсказка сбилась — попробуй ещё разок или возьми обычную подсказку.',
     llm_parse: 'Проверяльщик сбился. Попробуй ещё раз через минуту.',
     not_iterable: 'Этот шаг сейчас недоступен.',
     already_split: 'Разбивка уже прошла — продолжай с новой попыткой.',
@@ -193,8 +199,7 @@ async function openLevels() {
     const r = await api('levels', { __get: true });
     S.levels = Array.isArray(r) ? r : (r.levels || []);
   } catch (ex) {
-    if (ex.status === 401) { logout(); return; }
-    alert(ex.message);
+    notify(ex.message);
     return;
   }
   renderLevels();
@@ -239,7 +244,7 @@ function renderLevels() {
             const r = await api('attempt-create', { level_id: lv.id, stake });
             await loadAttempt(r.attempt.id);
           }
-        } catch (ex) { alert(ex.message); btn.disabled = false; }
+        } catch (ex) { notify(ex.message); btn.disabled = false; }
       };
       form.append(stakeWrap, btn);
       card.append(form);
@@ -258,12 +263,18 @@ let readTimer = null, readingActive = false;
 async function loadAttempt(attemptId) {
   const r = await api('attempt-get', { __get: true, id: attemptId });
   S.attempt = r.attempt;
-  const all = LEVEL_QUESTIONS[S.attempt.level_id] || [];
-  if (r.split && r.fragment) {
-    S.questions = all.filter(q => q.fragment_ref === r.fragment.id || q.fragment_ref === 'whole');
-  } else {
-    S.questions = all;
+  // Вопросы — из ответа attempt-get (task-12). Fallback на DEPRECATED-копию только для старого бэка.
+  let questions = Array.isArray(r.questions) && r.questions.length ? r.questions : null;
+  if (!questions) {
+    const all = LEVEL_QUESTIONS[S.attempt.level_id] || [];
+    questions = (r.split && r.fragment)
+      ? all.filter(q => q.fragment_ref === r.fragment.id || q.fragment_ref === 'whole')
+      : all;
+  } else if (r.split && questions.some(q => 'in_scope' in q)) {
+    // Новый бэк: берём только вопросы зоны split-фрагмента (флаг in_scope).
+    questions = questions.filter(q => q.in_scope !== false);
   }
+  S.questions = questions;
   S.textPayload = r.text;       // строка (фактический контракт) или объект
   S.fragment = r.fragment || null;
   S.marks = null; S.zeroQids = []; S.socratic = {}; S.answerStats = {};
@@ -338,7 +349,7 @@ function renderReader() {
         const box = card.querySelector('.q-hint') || el('div', 'q-hint');
         box.textContent = (r.hint && r.hint.text) || 'Подумай ещё немного.';
         if (!box.parentNode) card.append(box);
-      } catch (ex) { alert(ex.message); }
+      } catch (ex) { notify(ex.message); }
       hintBtn.disabled = false;
     };
     actions.append(hintBtn, count);
@@ -409,7 +420,7 @@ async function submitAnswers() {
     await api('attempt-answers', { id: S.attempt.id, answers });
     await runReview();
   } catch (ex) {
-    alert(ex.message);
+    notify(ex.message);
   } finally {
     btn.disabled = false;
   }
@@ -460,7 +471,7 @@ function renderResultActions() {
       const btn = el('button', 'btn btn-primary btn-big', 'Проверить снова');
       btn.onclick = async () => {
         btn.disabled = true;
-        try { await runReview(); } catch (ex) { alert(ex.message); btn.disabled = false; }
+        try { await runReview(); } catch (ex) { notify(ex.message); btn.disabled = false; }
       };
       wrap.append(btn);
     }
@@ -475,7 +486,7 @@ function renderResultActions() {
           alert(`Шаг лестницы сделан (итерация ${r.iterations}). Можешь проверить ответы снова.`);
           renderResultActions();
         }
-      } catch (ex) { alert(ex.message); }
+      } catch (ex) { notify(ex.message); }
       next.disabled = false;
     };
     wrap.append(next);
@@ -499,7 +510,7 @@ function renderSocraticBox(qid) {
         state.question = r.question;
         state.step = r.step;
         rerender();
-      } catch (ex) { alert(ex.message); btn.disabled = false; }
+      } catch (ex) { notify(ex.message); btn.disabled = false; }
     };
     box.append(btn);
   } else {
@@ -518,7 +529,7 @@ function renderSocraticBox(qid) {
         state.answers.push({ step: state.step, text });
         ta.value = '';
         rerender();
-      } catch (ex) { alert(ex.message); send.disabled = false; }
+      } catch (ex) { notify(ex.message); send.disabled = false; }
     };
     row.append(send);
     if (!state.rewritten) {
@@ -540,7 +551,7 @@ function renderSocraticBox(qid) {
             });
             state.rewritten = true;
             rerender();
-          } catch (ex) { alert(ex.message); save.disabled = false; }
+          } catch (ex) { notify(ex.message); save.disabled = false; }
         };
         box.append(rw, save);
         rewrite.disabled = true;
@@ -607,7 +618,7 @@ async function submitReflection() {
       await doApprove();
     }
   } catch (ex) {
-    alert(ex.message);
+    notify(ex.message);
   } finally {
     btn.disabled = false;
   }
@@ -677,11 +688,38 @@ async function openCabinet() {
     }
     show('cabinet');
   } catch (ex) {
-    alert(ex.message);
+    notify(ex.message);
   }
 }
 
 // ---------- Инициализация ----------
+// Единый баннер сообщений (task-12): вместо alert() — полоска сверху, сама прячется.
+let bannerTimer = null;
+function notify(msg) {
+  let b = $('#app-banner');
+  if (!b) {
+    b = el('div');
+    b.id = 'app-banner';
+    b.className = 'app-banner hidden';
+    document.body.prepend(b);
+  }
+  b.textContent = msg;
+  b.classList.remove('hidden');
+  clearTimeout(bannerTimer);
+  bannerTimer = setTimeout(() => b.classList.add('hidden'), 6000);
+}
+
+// 401 из api(): токен протух — чистим сессию и показываем вход с пояснением.
+function sessionExpired() {
+  stopReading();
+  localStorage.removeItem(TOKEN_KEY);
+  S.attempt = null;
+  const err = $('#auth-error');
+  err.textContent = 'Сессия закончилась — войди снова.';
+  err.classList.remove('hidden');
+  show('auth');
+}
+
 function logout() {
   stopReading();
   localStorage.removeItem(TOKEN_KEY);
