@@ -166,3 +166,33 @@ test('pack: чужой attempt → 404; статус не answering → 409', as
   assert.strictEqual(r1.status, 404);
   assert.strictEqual(r2.status, 409);
 });
+
+test('pack: split-attempt — в промпте только вопросы фрагмента + whole, reviewed_qids', async () => {
+  const QUESTIONS_WITH_REF = [
+    { qid: 'q1', type: 'T2', fragment_ref: 'whole', text: 'Сожми текст до одного предложения' },
+    { qid: 'q2', type: 'T5', fragment_ref: 'f9', text: 'Согласен ли ты с автором?' },
+    { qid: 'q3', type: 'T1', fragment_ref: 'f8', text: 'Передай суть мольбы своими словами' },
+  ];
+  const OVERRIDE = JSON.stringify({ fragment_id: 'f9', fragment_title: 'Мольба', text: 'Мини-текст фрагмента про мольбу.' });
+  const { repo, calls } = makeRepo({
+    getAttempt: async () => ({ id: 'a1', user_id: 'u1', level_id: 'lvl-p2-vanka', status: 'answering', iterations: 0, text_override: OVERRIDE }),
+    levels: async () => [{ id: 'lvl-p2-vanka', text_id: 'text-vanka-chekhov', rule_kid: 'Скажи суть', questions: QUESTIONS_WITH_REF }],
+  });
+  review._setRepo(repo);
+  review.setLlm(mockLlm(JSON.stringify({ results: [
+    { qid: 'q1', criteria: [2, 2, 2, 2, 2], explanation: 'хорошо' },
+    { qid: 'q2', criteria: [2, 2, 2, 2, 2], explanation: 'согласен, аргументированно' },
+  ] })));
+  const res = await review.pack({ user: USER, id: 'a1' });
+  review._setRepo(require('../lib/repo'));
+  assert.strictEqual(res.body.status, 'reflection');
+  assert.deepStrictEqual(res.body.reviewed_qids, ['q1', 'q2'], 'оценены whole + вопрос фрагмента f9');
+  assert.deepStrictEqual(Object.keys(res.body.marks).sort(), ['q1', 'q2'], 'q3 (другой фрагмент) не оценивается');
+  assert.match(lastPrompt, /ВОПРОС q1/, 'retrieval-вопрос whole в промпте');
+  assert.match(lastPrompt, /ВОПРОС q2/, 'вопрос фрагмента f9 в промпте');
+  assert.doesNotMatch(lastPrompt, /ВОПРОС q3/, 'вопрос чужого фрагмента f8 не в промпте');
+  assert.match(lastPrompt, /ответ на q2/, 'ответ фрагмента доехал до ЛЛМ');
+  assert.doesNotMatch(lastPrompt, /ответ на q3/, 'ответ чужого фрагмента не доехал');
+  assert.match(lastPrompt, /Мини-текст фрагмента про мольбу/, 'полный текст автора для «Своих слов» = мини-текст фрагмента');
+  assert.strictEqual(calls.updates.length, 1);
+});

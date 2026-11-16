@@ -38,9 +38,15 @@ function fragmentText(textRow, fragment) {
 
 // Ранжирование фрагментов по нагрузке вопросами: чем чаще fragment_ref вопросов указывает
 // на фрагмент, тем раньше он берётся в разбивку (первая разбивка — самый «вопрошаемый»).
+// Фрагменты без единого вопроса (weight=0) в разбивку не берутся. При равенстве весов —
+// явный tie-break по id фрагмента (детерминизм не через стабильность sort).
 function rankFragments(level, fragments) {
   const weight = f => level.questions.filter(q => q.fragment_ref === f.id).length;
-  return [...fragments].sort((x, y) => weight(y) - weight(x));
+  return fragments
+    .map(f => ({ f, w: weight(f) }))
+    .filter(x => x.w > 0)
+    .sort((a, b) => b.w - a.w || (a.f.id < b.f.id ? -1 : a.f.id > b.f.id ? 1 : 0))
+    .map(x => x.f);
 }
 
 async function next({ user, id }) {
@@ -52,12 +58,21 @@ async function next({ user, id }) {
   if (iterations < C.splitThreshold) return { body: { iterations } };
 
   // РАЗБИВКА: новый attempt на том же уровне, короткий фрагмент текста.
+  // Защита от повторного split с того же attempt: если событие split с from=этот attempt
+  // уже есть — лестница ушла дальше, повторять разбивку нельзя.
+  const events = await repo.listEvents(id);
+  if (events.some(e => e.type === 'split' && safeParse(e.payload_json, {}).from === id)) {
+    return { status: 409, body: { error: 'already_split' } };
+  }
   const level = (await repo.levels()).find(l => l.id === attempt.level_id);
   const textRow = await repo.getText(level.text_id);
   const fragments = safeParse(textRow && textRow.fragments_json, []);
   if (!fragments.length) return { body: { iterations } }; // фрагментов нет — разбивка нечего делить
   const passNumber = Number(attempt.pass_number || 1) + 1;
   const ranked = rankFragments(level, fragments);
+  // Кандидатов на фрагмент нет (все пройдены / ни один не нагружен вопросами) — лестница
+  // исчерпана, split не создаём: next просто отдаёт iterations.
+  if (!ranked.length) return { body: { iterations } };
   const fragment = ranked[Math.min(passNumber - 2, ranked.length - 1)];
   const now = Date.now();
   const fresh = {

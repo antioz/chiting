@@ -30,20 +30,29 @@ async function pack({ user, id }) {
   const [text, rawAnswers, bases] = await Promise.all([
     repo.getText(level.text_id), repo.getAnswers(id), repo.answerBases(attempt.level_id),
   ]);
-  // В БД поле text_raw; packReview ждёт text.
-  const answers = rawAnswers.map(a => ({ ...a, text: a.text_raw }));
+  // Split-режим (task-9): attempt читает мини-текст одного фрагмента — ЛЛМ оценивает ТОЛЬКО
+  // вопросы этого фрагмента (fragment_ref == id фрагмента) плюс retrieval-вопросы 'whole'
+  // (проверяют память, не зависят от фрагмента). Ответы и эталоны фильтруются соответственно.
+  const ov = safeParse(attempt.text_override, null);
+  const scopeQids = new Set(
+    ov
+      ? level.questions.filter(q => q.fragment_ref === ov.fragment_id || q.fragment_ref === 'whole').map(q => q.qid)
+      : level.questions.map(q => q.qid),
+  );
+  const questions = level.questions.filter(q => scopeQids.has(q.qid));
+  const answers = rawAnswers.filter(a => scopeQids.has(a.qid)).map(a => ({ ...a, text: a.text_raw }));
+  const answerBases = bases.filter(b => scopeQids.has(b.level_qid));
   const iteration = Number(attempt.iterations || 0);
   const tStart = Date.now();
 
   const { system, user: userPrompt } = prompts.packReview({
     rule: { kid_formulation: level.rule_kid },
-    questions: level.questions,
+    questions,
     answers,
-    answerBases: bases,
+    answerBases,
   });
-  // Текст целиком нужен ЛЛМ для критерия «Свои слова (нет копии слов автора)» и привязки к местам.
-  // Разбивка (task-9): attempt после split читает мини-текст фрагмента — проверяем его.
-  const ov = safeParse(attempt.text_override, null);
+  // «Свои слова (нет копии слов автора)»: текст автора = мини-текст фрагмента в split-режиме,
+  // полный текст уровня — в обычном.
   const textBody = ov ? ov.text : flattenBody(text && text.body_json);
   const withText = `ТЕКСТ ДЛЯ ПРОВЕРКИ:\n${textBody}\n---\n${userPrompt}`;
 
@@ -71,10 +80,11 @@ async function pack({ user, id }) {
     }
   }
 
-  // Итоговые отметки: finalMark по критериям каждого вопроса; вопрос, пропущенный ЛЛМ, — ноль.
+  // Итоговые отметки по вопросам scope (split: только фрагмент + 'whole'); вопрос,
+  // пропущенный ЛЛМ, — ноль.
   const marks = {};
   const zeroQids = [];
-  for (const q of level.questions) {
+  for (const q of questions) {
     const r = results.find(x => x.qid === q.qid);
     if (!r) {
       marks[q.qid] = { mark: 0, total: 0, explanation: 'ЛЛМ не вернула оценку по вопросу' };
@@ -89,9 +99,10 @@ async function pack({ user, id }) {
   const status = zeroQids.length ? 'socratic' : 'reflection';
   await repo.updateAttemptReview(id, { status, marks_json: marks, zero_qids_json: zeroQids, updated_at: Date.now() });
   await repo.addEvent(user.id, id, 'review', { status, zero_qids: zeroQids }, Date.now());
+  const reviewedQids = questions.map(q => q.qid);
   return zeroQids.length
-    ? { body: { status, zero_qids: zeroQids, marks } }
-    : { body: { status, marks } };
+    ? { body: { status, zero_qids: zeroQids, marks, reviewed_qids: reviewedQids } }
+    : { body: { status, marks, reviewed_qids: reviewedQids } };
 }
 
 function _setRepo(r) { repo = r; }

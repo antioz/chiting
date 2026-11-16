@@ -116,3 +116,89 @@ test('next: approved attempt → 409', async () => {
   iterate._setRepo(require('../lib/repo'));
   assert.strictEqual(res.status, 409);
 });
+
+test('next: фрагмент с weight=0 не выбирается на split (split не выбирает фрагмент без вопросов)', async () => {
+  const level = {
+    ...LEVEL,
+    questions: [{ qid: 'q5', type: 'T5', fragment_ref: 'f5', text: 'Согласен ли ты с автором?' }],
+  };
+  const textRow = {
+    ...TEXT_ROW,
+    fragments_json: [
+      { id: 'f0', title: 'Пустой фрагмент', paras: [0, 1] }, // ни один вопрос не ссылается
+      ...FRAGMENTS,
+    ],
+  };
+  const { repo, calls } = makeRepo({
+    levels: async () => [level],
+    getText: async () => textRow,
+    getAttempt: async () => ({ id: 'a1', user_id: 'u1', level_id: 'lvl-p2-fersman', stake: 50, status: 'answering', pass_number: 1, iterations: 3 }),
+  });
+  iterate._setRepo(repo);
+  const res = await iterate.next({ user: USER, id: 'a1' });
+  iterate._setRepo(require('../lib/repo'));
+  const ov = JSON.parse(res.body.attempt.text_override);
+  assert.strictEqual(ov.fragment_id, 'f5', 'выбран нагруженный фрагмент, а не f0 с нулевым весом');
+  assert.strictEqual(calls.events.filter(e => e[2] === 'split').length, 1);
+});
+
+test('next: tie-break по id при равных весах — детерминизм явно', async () => {
+  const level = {
+    ...LEVEL,
+    questions: [
+      { qid: 'qa', type: 'T1', fragment_ref: 'fb', text: 'вопрос к fb' },
+      { qid: 'qb', type: 'T1', fragment_ref: 'fa', text: 'вопрос к fa' },
+    ],
+  };
+  // fa и fb равны по весу (1) — берётся fa (меньший id), независимо от порядка в fragments_json.
+  const textRow = {
+    ...TEXT_ROW,
+    fragments_json: [
+      { id: 'fb', title: 'Б', paras: [0, 1] },
+      { id: 'fa', title: 'А', paras: [2, 3] },
+    ],
+  };
+  const { repo } = makeRepo({
+    levels: async () => [level],
+    getText: async () => textRow,
+    getAttempt: async () => ({ id: 'a1', user_id: 'u1', level_id: 'lvl-p2-fersman', stake: 50, status: 'answering', pass_number: 1, iterations: 3 }),
+  });
+  iterate._setRepo(repo);
+  const res = await iterate.next({ user: USER, id: 'a1' });
+  iterate._setRepo(require('../lib/repo'));
+  const ov = JSON.parse(res.body.attempt.text_override);
+  assert.strictEqual(ov.fragment_id, 'fa', 'при равенстве весов — меньший id');
+});
+
+test('next: повторный split с того же attempt → 409 already_split', async () => {
+  const { repo } = makeRepo({
+    getAttempt: async () => ({ id: 'a1', user_id: 'u1', level_id: 'lvl-p2-fersman', stake: 50, status: 'answering', pass_number: 1, iterations: 3 }),
+    listEvents: async () => [
+      { type: 'hint', payload_json: '{}' },
+      { type: 'split', payload_json: JSON.stringify({ from: 'a1', to: 'a2', fragment_id: 'f5' }) },
+    ],
+  });
+  iterate._setRepo(repo);
+  const res = await iterate.next({ user: USER, id: 'a1' });
+  iterate._setRepo(require('../lib/repo'));
+  assert.strictEqual(res.status, 409);
+  assert.deepStrictEqual(res.body, { error: 'already_split' });
+});
+
+test('next: кандидатов на фрагмент нет (все weight=0) → без split, только iterations', async () => {
+  const level = {
+    ...LEVEL,
+    questions: [{ qid: 'q1', type: 'T2', fragment_ref: 'whole', text: 'Сожми до одного предложения.' }],
+  };
+  const { repo, calls } = makeRepo({
+    levels: async () => [level],
+    getAttempt: async () => ({ id: 'a1', user_id: 'u1', level_id: 'lvl-p2-fersman', stake: 50, status: 'answering', pass_number: 1, iterations: 3 }),
+  });
+  iterate._setRepo(repo);
+  const res = await iterate.next({ user: USER, id: 'a1' });
+  iterate._setRepo(require('../lib/repo'));
+  assert.deepStrictEqual(res.body, { iterations: 4 }, 'лестница исчерпана — split не создаётся');
+  assert.strictEqual(res.body.attempt, undefined);
+  assert.strictEqual(calls.created, null, 'новый attempt не создавался');
+  assert.strictEqual(calls.events.filter(e => e[2] === 'split').length, 0);
+});
