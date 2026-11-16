@@ -12,5 +12,5 @@ module.exports = {
   tokenPriceRubPer1k: Number(process.env.TOKEN_PRICE || 0.2),
   adminPassword: process.env.ADMIN_PASSWORD,
   dailyAlertRub: Number(process.env.DAILY_ALERT_RUB || 300),
-  siteOrigins: ['https://antiosov.github.io', 'http://localhost:8000'],
+  siteOrigins: ['https://antioz.github.io', 'https://antiosov.github.io', 'http://localhost:8000'],
 };
