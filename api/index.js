@@ -5,6 +5,7 @@ const repo = require('./lib/repo');
 const auth = require('./lib/handlers/auth');
 const attempts = require('./lib/handlers/attempts');
 const review = require('./lib/handlers/review');
+const socratic = require('./lib/handlers/socratic');
 
 // SECRET из env функции; jwt.init при холодном старте (index.js грузится один раз на инстанс).
 jwt.init(process.env.SECRET || C.secret);
@@ -25,6 +26,11 @@ routes['attempt-event'] = (p, ctx) => attempts.event({ user: ctx.user, id: p.id,
 
 // Оценка пакета ответов ЛЛМ (task-6): лимит llmCallsLimit вызовов на attempt, статус socratic/reflection.
 routes['review'] = (p, ctx) => review.pack({ user: ctx.user, id: p.id });
+
+// Сократовский цикл (task-7): наводящие вопросы по нулевым ответам и ответы ребёнка на них.
+// Финальный переписанный ответ ребёнок отправляет через attempt-answers + повторный review.
+routes['socratic-ask'] = (p, ctx) => socratic.ask({ user: ctx.user, id: p.id, qid: p.qid });
+routes['socratic-answer'] = (p, ctx) => socratic.answer({ user: ctx.user, id: p.id, qid: p.qid, text: p.text });
 
 // Список уровней для ребёнка: правило (kid_formulation), текст, delay_hours и доступность
 // по времени последнего approved-прохода (§6 методологии: проход = правило на текст).

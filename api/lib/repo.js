@@ -162,6 +162,33 @@ async function addEvent(userId, attemptId, type, payload, t) {
   }
 }
 
+// --- сократовский цикл (task-7) ---
+// Шаги наводящих вопросов по (attempt, qid). PK (attempt_id, qid, step):
+// ask пишет question_text, answer дописывает child_answer тем же UPSERT.
+async function countSocraticTurns(attemptId, qid) {
+  const rs = await execute('SELECT COUNT(*) AS n FROM socratic_turns WHERE attempt_id = $a AND qid = $q', { $a: db.V.s(attemptId), $q: db.V.s(qid) });
+  const row = rs[0] && rs[0][0];
+  return row ? Number(row.n) : 0;
+}
+async function getSocraticTurns(attemptId, qid) {
+  const rs = await execute('SELECT * FROM socratic_turns WHERE attempt_id = $a AND qid = $q ORDER BY step ASC', { $a: db.V.s(attemptId), $q: db.V.s(qid) });
+  return rs[0] || [];
+}
+async function addSocraticTurn(t) {
+  await execute(
+    'UPSERT INTO socratic_turns (attempt_id, qid, step, question_text, child_answer, llm_call_ref, created_at) VALUES ($a, $q, $st, $qt, $ca, $ref, $ts)',
+    { $a: db.V.s(t.attempt_id), $q: db.V.s(t.qid), $st: db.V.u32(t.step), $qt: db.V.s(t.question_text || ''), $ca: db.V.s(t.child_answer || ''), $ref: db.V.s(t.llm_call_ref || ''), $ts: db.V.u64(t.created_at || Date.now()) }
+  );
+}
+// Последняя pack-запись: оттуда достаём criteria нулевого вопроса (zeroCriteria для промпта сократа).
+async function getLastLlmReview(attemptId, scope) {
+  const rs = await execute(
+    'SELECT * FROM llm_reviews WHERE attempt_id = $a AND scope = $s ORDER BY created_at DESC LIMIT 1',
+    { $a: db.V.s(attemptId), $s: db.V.s(scope) }
+  );
+  return rs[0] && rs[0][0];
+}
+
 function safeParse(j, dflt) { try { return typeof j === 'string' ? JSON.parse(j) : (j || dflt); } catch { return dflt; } }
 
-module.exports = { execute, getUserByLogin, createUser, inviteUse, waitlistAdd, levels, answerBases, lastApprovedAttempt, getLevel, getAttempt, createAttempt, upsertAnswer, getAnswers, setAttemptStatus, addEvent, getText, countLlmReviews, addLlmReview, updateAttemptReview };
+module.exports = { execute, getUserByLogin, createUser, inviteUse, waitlistAdd, levels, answerBases, lastApprovedAttempt, getLevel, getAttempt, createAttempt, upsertAnswer, getAnswers, setAttemptStatus, addEvent, getText, countLlmReviews, addLlmReview, updateAttemptReview, countSocraticTurns, addSocraticTurn, getSocraticTurns, getLastLlmReview };
