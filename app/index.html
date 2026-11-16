@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Читинг — читаем по-настоящему</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="topbar" class="topbar hidden">
+  <div class="topbar-logo">Читинг</div>
+  <nav class="topbar-nav">
+    <button id="nav-levels" class="btn btn-ghost">Задания</button>
+    <button id="nav-cabinet" class="btn btn-ghost">Кабинет</button>
+    <button id="nav-logout" class="btn btn-ghost">Выйти</button>
+  </nav>
+</header>
+
+<main id="app">
+
+  <!-- 1. Вход / регистрация -->
+  <section id="screen-auth" class="screen">
+    <div class="card auth-card">
+      <h1 class="title">Читинг</h1>
+      <p class="subtitle">Читаем текст по правилу и зарабатываем настоящие деньги.</p>
+      <div class="tabs">
+        <button id="auth-tab-login" class="tab active">Вход</button>
+        <button id="auth-tab-register" class="tab">Регистрация</button>
+      </div>
+      <form id="auth-form" autocomplete="off">
+        <label class="field">
+          <span class="field-label">Имя</span>
+          <input id="auth-name" class="input" type="text" required maxlength="40">
+        </label>
+        <label class="field">
+          <span class="field-label">Пароль</span>
+          <input id="auth-password" class="input" type="password" required minlength="4">
+        </label>
+        <label class="field" id="auth-invite-wrap">
+          <span class="field-label">Код-приглашение</span>
+          <input id="auth-invite" class="input" type="text" placeholder="Например: TEST-10">
+        </label>
+        <div id="auth-error" class="error hidden"></div>
+        <button type="submit" class="btn btn-primary btn-big" id="auth-submit">Войти</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- 2. Выбор задания -->
+  <section id="screen-levels" class="screen hidden">
+    <h1 class="title">Выбери задание</h1>
+    <p class="subtitle">Поставь ставку — сколько денег хочешь заработать за честный ответ.</p>
+    <div id="levels-list" class="levels-list"></div>
+  </section>
+
+  <!-- 3. Читалка -->
+  <section id="screen-reader" class="screen hidden">
+    <div class="reader-head">
+      <h1 class="title" id="reader-title">Текст</h1>
+      <div class="tabs">
+        <button id="reader-tab-text" class="tab active">Текст</button>
+        <button id="reader-tab-questions" class="tab">Вопросы</button>
+      </div>
+    </div>
+    <div id="reader-rule" class="rule-plate"></div>
+    <div id="reader-text-pane" class="reader-pane">
+      <div id="reader-text" class="reader-text"></div>
+      <p class="reader-note">Прочитай внимательно. Таймер чтения уже идёт — это нормально, торопиться не надо.</p>
+    </div>
+    <div id="reader-questions-pane" class="reader-pane hidden">
+      <p class="pane-hint">Отвечай своими словами. Копипаст не сработает — а мы всё увидим.</p>
+      <div id="reader-questions"></div>
+      <div id="answers-warning" class="error hidden"></div>
+      <button id="answers-submit" class="btn btn-primary btn-big">Отправить ответы</button>
+    </div>
+  </section>
+
+  <!-- 4. Результат -->
+  <section id="screen-result" class="screen hidden">
+    <h1 class="title">Результат</h1>
+    <div id="result-cards"></div>
+    <div id="result-actions" class="result-actions"></div>
+  </section>
+
+  <!-- 5. Рефлексия -->
+  <section id="screen-reflection" class="screen hidden">
+    <h1 class="title">Пара слов напоследок</h1>
+    <p class="subtitle">Три коротких вопроса — честно, как думаешь.</p>
+    <div id="reflection-list"></div>
+    <div id="reflection-warning" class="error hidden"></div>
+    <button id="reflection-submit" class="btn btn-primary btn-big">Отправить</button>
+  </section>
+
+  <!-- 6. Апрув -->
+  <section id="screen-approve" class="screen hidden">
+    <div id="confetti" class="confetti"></div>
+    <div class="card approve-card">
+      <h1 class="title">Задание засчитано!</h1>
+      <p class="subtitle">Купон на деньги — покажи его взрослому.</p>
+      <div class="coupon">
+        <div class="coupon-amount" id="coupon-amount"></div>
+        <div class="coupon-code" id="coupon-code"></div>
+        <div class="coupon-status">Не погашен</div>
+      </div>
+      <button id="approve-to-cabinet" class="btn btn-primary btn-big">В кабинет</button>
+    </div>
+  </section>
+
+  <!-- 7. Кабинет -->
+  <section id="screen-cabinet" class="screen hidden">
+    <h1 class="title">Кабинет</h1>
+    <h2 class="h2">Купоны</h2>
+    <div id="cabinet-coupons"></div>
+    <h2 class="h2">Мои попытки</h2>
+    <div id="cabinet-attempts"></div>
+  </section>
+
+</main>
+<script src="app.js"></script>
+</body>
+</html>
