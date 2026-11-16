@@ -1,6 +1,7 @@
 // Тонкие обёртки над YDB queryClient (паттерн из merch-api).
 // Данные — декларативные запросы; транзакционность — через db.tx (см. lib/db.js).
 const db = require('./db');
+const { TypedValues } = require('./db');
 
 async function execute(yql, params = {}) { await db.ready(); return db.query(yql, params); }
 
@@ -34,6 +35,42 @@ async function waitlistAdd(w) {
   await execute(
     'INSERT INTO waitlist (id, name, contact, created_at, status) VALUES ($id, $n, $ct, $ca, $s)',
     { $id: db.V.s(w.id), $n: db.V.s(w.name), $ct: db.V.s(w.contact || ''), $ca: db.V.u64(w.created_at), $s: db.V.s(w.status || 'new') }
+  );
+}
+
+// --- review (task-6) ---
+// Текст уровня целиком: body_json — Json (массив абзацев/фрагментов).
+async function getText(id) {
+  const rs = await execute('SELECT * FROM texts WHERE id = $i', { $i: db.V.s(id) });
+  return rs[0] && rs[0][0];
+}
+// Лимит LLM-вызовов — на ВСЕ записи attempt (не только scope='pack').
+async function countLlmReviews(attemptId) {
+  const rs = await execute('SELECT COUNT(*) AS n FROM llm_reviews WHERE attempt_id = $a', { $a: db.V.s(attemptId) });
+  const row = rs[0] && rs[0][0];
+  return row ? Number(row.n) : 0;
+}
+// Одна запись = один LLM-вызов (pack — один вызов на весь пакет, qid='pack').
+async function addLlmReview(r) {
+  await execute(
+    `INSERT INTO llm_reviews (attempt_id, iteration, scope, qid, criteria_json, total, final_mark, verdict, explanation,
+                              rubric_version, request_json, response_json, tokens_in, tokens_out, cost_rub, t_spent, created_at)
+     VALUES ($a, $it, $sc, $q, $cj, $to, $fm, $v, $e, $rv, $req, $resp, $ti, $tout, $c, $ts, $ca)`,
+    {
+      $a: db.V.s(r.attempt_id), $it: db.V.u32(r.iteration || 0), $sc: db.V.s(r.scope), $q: db.V.s(r.qid || 'pack'),
+      $cj: db.V.j(r.criteria_json || []), $to: db.V.u32(r.total || 0), $fm: db.V.u32(r.final_mark || 0),
+      $v: db.V.s(r.verdict || ''), $e: db.V.s(r.explanation || ''), $rv: db.V.s(r.rubric_version || ''),
+      $req: db.V.j(r.request_json || {}), $resp: db.V.j(r.response_json || {}),
+      $ti: db.V.u64(r.tokens_in || 0), $tout: db.V.u64(r.tokens_out || 0), $c: TypedValues.double(Number(r.cost_rub) || 0),
+      $ts: db.V.u64(r.t_spent || 0), $ca: db.V.u64(Date.now()),
+    }
+  );
+}
+// Итог ревью пакета: статус (socratic/reflection) + marks_json {qid:{mark,total,explanation}} + zero_qids_json.
+async function updateAttemptReview(id, r) {
+  await execute(
+    'UPDATE attempts SET status = $s, marks_json = $m, zero_qids_json = $z, updated_at = $ua WHERE id = $i',
+    { $s: db.V.s(r.status), $m: db.V.j(r.marks_json || {}), $z: db.V.j(r.zero_qids_json || []), $ua: db.V.u64(r.updated_at || Date.now()), $i: db.V.s(id) }
   );
 }
 
@@ -124,4 +161,4 @@ async function addEvent(userId, attemptId, type, payload, t) {
 
 function safeParse(j, dflt) { try { return typeof j === 'string' ? JSON.parse(j) : (j || dflt); } catch { return dflt; } }
 
-module.exports = { execute, getUserByLogin, createUser, inviteUse, waitlistAdd, levels, answerBases, lastApprovedAttempt, getLevel, getAttempt, createAttempt, upsertAnswer, getAnswers, setAttemptStatus, addEvent };
+module.exports = { execute, getUserByLogin, createUser, inviteUse, waitlistAdd, levels, answerBases, lastApprovedAttempt, getLevel, getAttempt, createAttempt, upsertAnswer, getAnswers, setAttemptStatus, addEvent, getText, countLlmReviews, addLlmReview, updateAttemptReview };

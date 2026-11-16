@@ -5,9 +5,9 @@ CREATE TABLE texts (id Utf8, title Utf8, author Utf8, body_json Json, fragments_
 CREATE TABLE rules (code Utf8, kid_formulation Utf8, strict_formulation Utf8, version Utf8, PRIMARY KEY (code));
 CREATE TABLE levels (id Utf8, rule_code Utf8, text_id Utf8, questions_json Json, delay_hours Uint32, difficulty Uint32, PRIMARY KEY (id));
 CREATE TABLE answer_bases (id Utf8, level_qid Utf8, kind Utf8, etalon Utf8, clusters_json Json, version Utf8, PRIMARY KEY (id));
-CREATE TABLE attempts (id Utf8, user_id Utf8, level_id Utf8, stake Uint32, status Utf8, pass_number Uint32, socratic_count Uint32, iterations Uint32, created_at Uint64, updated_at Uint64, PRIMARY KEY (id));
+CREATE TABLE attempts (id Utf8, user_id Utf8, level_id Utf8, stake Uint32, status Utf8, pass_number Uint32, socratic_count Uint32, iterations Uint32, marks_json Json, zero_qids_json Json, created_at Uint64, updated_at Uint64, PRIMARY KEY (id));
 CREATE TABLE answers (attempt_id Utf8, qid Utf8, text_raw Utf8, typed_chars Uint32, pasted Bool, t_answer Uint64, updated_at Uint64, PRIMARY KEY (attempt_id, qid));
-CREATE TABLE llm_reviews (attempt_id Utf8, iteration Uint32, scope Utf8, qid Utf8, criteria_json Json, total Uint32, final_mark Uint32, verdict Utf8, explanation Utf8, rubric_version Utf8, tokens_in Uint64, tokens_out Uint64, cost_rub Double, t_spent Uint64, created_at Uint64, PRIMARY KEY (attempt_id, iteration, scope, qid));
+CREATE TABLE llm_reviews (attempt_id Utf8, iteration Uint32, scope Utf8, qid Utf8, criteria_json Json, total Uint32, final_mark Uint32, verdict Utf8, explanation Utf8, rubric_version Utf8, request_json Json, response_json Json, tokens_in Uint64, tokens_out Uint64, cost_rub Double, t_spent Uint64, created_at Uint64, PRIMARY KEY (attempt_id, iteration, scope, qid));
 CREATE TABLE socratic_turns (attempt_id Utf8, qid Utf8, step Uint32, question_text Utf8, child_answer Utf8, llm_call_ref Utf8, created_at Uint64, PRIMARY KEY (attempt_id, qid, step));
 CREATE TABLE reflection_answers (attempt_id Utf8, qid Utf8, text_raw Utf8, mark Uint32, created_at Uint64, PRIMARY KEY (attempt_id, qid));
 CREATE TABLE coupons (id Utf8, user_id Utf8, attempt_id Utf8, amount Uint32, status Utf8, code Utf8, created_at Uint64, PRIMARY KEY (id));

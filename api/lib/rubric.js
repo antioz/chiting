@@ -13,4 +13,21 @@ function parseLlmJson(text) {
     return { criteria: o.criteria, explanation: String(o.explanation || '').slice(0, 2000) };
   } catch { return null; }
 }
-module.exports = { finalMark, parseLlmJson };
+// Пакетный формат ответа packReview: {"results":[{"qid","criteria":[0-2 x5],"explanation"}]}.
+// Строгость та же: ровно 5 критериев со значениями 0–2, без markdown вокруг JSON (кроме обёртки ```).
+function parseLlmResults(text) {
+  const m = String(text).match(/\{[\s\S]*"results"[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    const o = JSON.parse(m[0]);
+    if (!Array.isArray(o.results) || o.results.length === 0) return null;
+    const results = o.results.map(r => ({
+      qid: String(r.qid || ''),
+      criteria: r.criteria,
+      explanation: String(r.explanation || '').slice(0, 2000),
+    }));
+    if (results.some(r => !r.qid || !Array.isArray(r.criteria) || r.criteria.length !== 5 || !r.criteria.every(x => [0, 1, 2].includes(x)))) return null;
+    return results;
+  } catch { return null; }
+}
+module.exports = { finalMark, parseLlmJson, parseLlmResults };

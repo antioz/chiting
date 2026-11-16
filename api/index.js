@@ -4,6 +4,7 @@ const jwt = require('./lib/jwt');
 const repo = require('./lib/repo');
 const auth = require('./lib/handlers/auth');
 const attempts = require('./lib/handlers/attempts');
+const review = require('./lib/handlers/review');
 
 // SECRET из env функции; jwt.init при холодном старте (index.js грузится один раз на инстанс).
 jwt.init(process.env.SECRET || C.secret);
@@ -21,6 +22,9 @@ routes.health = async () => ({ body: { ok: true, rubric_version: C.rubricVersion
 routes['attempt-create'] = (p, ctx) => attempts.create({ user: ctx.user, level_id: p.level_id, stake: p.stake });
 routes['attempt-answers'] = (p, ctx) => attempts.answers({ user: ctx.user, id: p.id, answers: p.answers });
 routes['attempt-event'] = (p, ctx) => attempts.event({ user: ctx.user, id: p.id, type: p.type, payload: p.payload });
+
+// Оценка пакета ответов ЛЛМ (task-6): лимит llmCallsLimit вызовов на attempt, статус socratic/reflection.
+routes['review'] = (p, ctx) => review.pack({ user: ctx.user, id: p.id });
 
 // Список уровней для ребёнка: правило (kid_formulation), текст, delay_hours и доступность
 // по времени последнего approved-прохода (§6 методологии: проход = правило на текст).
