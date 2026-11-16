@@ -202,9 +202,13 @@ async function getReflectionAnswers(attemptId) {
   const rs = await execute('SELECT * FROM reflection_answers WHERE attempt_id = $a ORDER BY qid', { $a: db.V.s(attemptId) });
   return rs[0] || [];
 }
+// Атомарное «insert-if-not-exists»: конкурентные approve одного attempt не создают
+// второй купон (гард WHERE NOT EXISTS применяется к актуальному состоянию таблицы
+// внутри одного запроса YQL). Реальный attempt_id в PK добавлять не нужно.
 async function createCoupon(c) {
   await execute(
-    'INSERT INTO coupons (id, user_id, attempt_id, amount, status, code, created_at) VALUES ($id, $u, $a, $am, $s, $c, $ca)',
+    'INSERT INTO coupons (id, user_id, attempt_id, amount, status, code, created_at) ' +
+    'SELECT $id, $u, $a, $am, $s, $c, $ca WHERE NOT EXISTS (SELECT 1 FROM coupons WHERE attempt_id = $a)',
     { $id: db.V.s(c.id), $u: db.V.s(c.user_id), $a: db.V.s(c.attempt_id), $am: db.V.u32(c.amount), $s: db.V.s(c.status), $c: db.V.s(c.code), $ca: db.V.u64(c.created_at) }
   );
 }

@@ -79,13 +79,17 @@ async function approve({ user, id }) {
     return { status: 409, body: { error: 'reflection_incomplete' } };
   }
   const code = couponCode();
+  // createCoupon — атомарный insert-if-not-exists по attempt_id: при гонке двух
+  // approve второй INSERT не вставит дубль. После него единый путь возврата:
+  // перечитываем купон по attempt (победившая запись у обоих вызовов одна).
   await repo.createCoupon({
     id: crypto.randomUUID(), user_id: user.id, attempt_id: id,
     amount: Number(attempt.stake), status: 'active', code, created_at: Date.now(),
   });
   await repo.setAttemptStatus(id, 'approved', Date.now());
   await repo.addEvent(user.id, id, 'approve', { coupon: code }, Date.now());
-  return { body: { coupon: { code, amount: Number(attempt.stake) } } };
+  const coupon = await repo.getCouponByAttempt(id);
+  return { body: { coupon: { code: coupon.code, amount: Number(coupon.amount) } } };
 }
 
 // Кабинет ребёнка: свои купоны + свои попытки (сводно для админки/личного кабинета).

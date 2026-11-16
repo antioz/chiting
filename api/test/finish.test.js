@@ -143,6 +143,37 @@ test('approve: happy path → купон с amount=ставкой, повтор�
   assert.strictEqual(state.calls.events.filter(e => e[2] === 'approve').length, 1);
 });
 
+test('approve: одновременные approve (гонка без перечитывания) → ровно 1 купон, оба вызова — одинаковый code', async () => {
+  const state = makeState({ reflection: RQ.map(q => ({ qid: q.qid, mark: 2 })) });
+  // Репо с INSERT-гардом: createCoupon — insert-if-not-exists по attempt_id.
+  // Гонка имитируется тем, что getCouponByAttempt в пре-чеке обоих вызовов
+  // возвращает null (нет перечитывания между ними), а гард в createCoupon
+  // не даёт второму вызову вставить дубль; пост-чтение у обоих — запись победителя.
+  let preCheckReads = 0;
+  const repo = Object.assign(makeRepo(state), {
+    getCouponByAttempt: async (attemptId) => {
+      preCheckReads++;
+      if (preCheckReads <= 2) return null; // оба пре-чека «не видят» купон
+      return state.coupons.find(c => c.attempt_id === attemptId) || null;
+    },
+    createCoupon: async (c) => {
+      state.calls.coupons.push(c);
+      if (!state.coupons.some(x => x.attempt_id === c.attempt_id)) state.coupons.push(c); // INSERT-гард
+    },
+    setAttemptStatus: async (id, s, now) => { state.calls.statuses.push([id, s]); }, // статус не меняем: второй вызов как при гонке
+  });
+  finish._setRepo(repo);
+  const [r1, r2] = await Promise.all([
+    finish.approve({ user: USER, id: 'a1' }),
+    finish.approve({ user: USER, id: 'a1' }),
+  ]);
+  assert.strictEqual(state.coupons.length, 1, 'второй INSERT не создал дубль');
+  assert.strictEqual(state.calls.coupons.length, 2, 'оба вызова пытались создать (вторая — no-op)');
+  assert.strictEqual(r1.body.coupon.code, r2.body.coupon.code, 'оба вызова вернули одинаковый code');
+  assert.strictEqual(r1.body.coupon.amount, 25);
+  assert.strictEqual(r2.body.coupon.amount, 25);
+});
+
 test('approve: чужой attempt → 404', async () => {
   const state = makeState({ attempt: { id: 'a1', user_id: 'u2', stake: 25, status: 'reflection' } });
   finish._setRepo(makeRepo(state));
