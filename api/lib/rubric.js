@@ -30,4 +30,32 @@ function parseLlmResults(text) {
     return results;
   } catch { return null; }
 }
-module.exports = { finalMark, parseLlmJson, parseLlmResults };
+// Формат ответа блока рефлексии (task-8): {"results":[{"qid","mark":0|1|2,"explanation"}]}.
+// Тотолерантный к урезанному ответу ЛЛМ: если JSON оборван — пробуем отрезать по
+// последнему закрывающему '}' и распарсить то, что успело прийти (§экономика: ответ может быть урезан).
+function parseLlmReflectionResults(text) {
+  let s = String(text || '');
+  const m = s.match(/\{[\s\S]*"results"[\s\S]*\}/);
+  if (!m) return null;
+  s = m[0];
+  // Ответ мог быть урезан по токенам: пробуем как есть, с закрытыми скобками,
+  // и с отрезанием недописанной последней записи.
+  const lastEntry = s.lastIndexOf('}');
+  const candidates = [s, s + ']}'];
+  if (lastEntry > 0) candidates.push(s.slice(0, lastEntry + 1) + ']}');
+  for (const c of candidates) {
+    try {
+      const o = JSON.parse(c);
+      if (!Array.isArray(o.results) || o.results.length === 0) return null;
+      const results = o.results.map(r => ({
+        qid: String(r.qid || ''),
+        mark: Number(r.mark),
+        explanation: String(r.explanation || '').slice(0, 2000),
+      }));
+      if (results.some(r => !r.qid || ![0, 1, 2].includes(r.mark))) return null;
+      return results;
+    } catch { /* следующий кандидат */ }
+  }
+  return null;
+}
+module.exports = { finalMark, parseLlmJson, parseLlmResults, parseLlmReflectionResults };

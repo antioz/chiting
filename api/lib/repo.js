@@ -189,6 +189,38 @@ async function getLastLlmReview(attemptId, scope) {
   return rs[0] && rs[0][0];
 }
 
+// --- рефлексия и купоны (task-8) ---
+// Одна запись на (attempt_id, qid): повторный reflect (ребёнок переписал нулевые) — REPLACE.
+// question_text/answer_text/explanation — для полного отчёта админки по прохождению.
+async function addReflectionAnswer(attemptId, q) {
+  await execute(
+    'REPLACE INTO reflection_answers (attempt_id, qid, question_text, answer_text, mark, explanation, created_at) VALUES ($a, $q, $qt, $at, $m, $e, $ca)',
+    { $a: db.V.s(attemptId), $q: db.V.s(q.qid), $qt: db.V.s(q.question_text || ''), $at: db.V.s(q.answer_text || ''), $m: db.V.u32(q.mark || 0), $e: db.V.s(q.explanation || ''), $ca: db.V.u64(Date.now()) }
+  );
+}
+async function getReflectionAnswers(attemptId) {
+  const rs = await execute('SELECT * FROM reflection_answers WHERE attempt_id = $a ORDER BY qid', { $a: db.V.s(attemptId) });
+  return rs[0] || [];
+}
+async function createCoupon(c) {
+  await execute(
+    'INSERT INTO coupons (id, user_id, attempt_id, amount, status, code, created_at) VALUES ($id, $u, $a, $am, $s, $c, $ca)',
+    { $id: db.V.s(c.id), $u: db.V.s(c.user_id), $a: db.V.s(c.attempt_id), $am: db.V.u32(c.amount), $s: db.V.s(c.status), $c: db.V.s(c.code), $ca: db.V.u64(c.created_at) }
+  );
+}
+async function getCouponByAttempt(attemptId) {
+  const rs = await execute('SELECT * FROM coupons WHERE attempt_id = $a', { $a: db.V.s(attemptId) });
+  return rs[0] && rs[0][0];
+}
+async function listCoupons(userId) {
+  const rs = await execute('SELECT code, amount, status, created_at FROM coupons WHERE user_id = $u ORDER BY created_at DESC', { $u: db.V.s(userId) });
+  return rs[0] || [];
+}
+async function listUserAttempts(userId) {
+  const rs = await execute('SELECT id, level_id, status, updated_at FROM attempts WHERE user_id = $u ORDER BY updated_at DESC', { $u: db.V.s(userId) });
+  return rs[0] || [];
+}
+
 function safeParse(j, dflt) { try { return typeof j === 'string' ? JSON.parse(j) : (j || dflt); } catch { return dflt; } }
 
-module.exports = { execute, getUserByLogin, createUser, inviteUse, waitlistAdd, levels, answerBases, lastApprovedAttempt, getLevel, getAttempt, createAttempt, upsertAnswer, getAnswers, setAttemptStatus, addEvent, getText, countLlmReviews, addLlmReview, updateAttemptReview, countSocraticTurns, addSocraticTurn, getSocraticTurns, getLastLlmReview };
+module.exports = { execute, getUserByLogin, createUser, inviteUse, waitlistAdd, levels, answerBases, lastApprovedAttempt, getLevel, getAttempt, createAttempt, upsertAnswer, getAnswers, setAttemptStatus, addEvent, getText, countLlmReviews, addLlmReview, updateAttemptReview, countSocraticTurns, addSocraticTurn, getSocraticTurns, getLastLlmReview, addReflectionAnswer, getReflectionAnswers, createCoupon, getCouponByAttempt, listCoupons, listUserAttempts };

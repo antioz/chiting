@@ -19,9 +19,16 @@ function socraticQuestion({rule, question, childAnswer, zeroCriteria, attempts})
   const user = `Правило уровня: «${rule.kid_formulation}». Задание: ${question.text}\nОтвет ребёнка: «${childAnswer}»\nТип наводящего вопроса: ${type.replace(/\?/g, '…')}\nЗадай один вопрос.`;
   return { system, user };
 }
+// Фиксированный блок рефлексии после пакета (§3.4 методологии): один Т4-а,
+// один Т4-д, один Т4-п. Формулировки — из методологии v3.
+const REFLECTION_QUESTIONS = [
+  { qid: 'r1', type: 'T4-а', text: 'Прочитай пакет ещё раз в голове. Какое слово из текста тебе показалось самым важным? Самым ярким? Самым неожиданным? А может, запомнилась не фраза, а мысль? Расскажи: что в тебе отозвалось в этот момент?' },
+  { qid: 'r2', type: 'T4-д', text: 'Где ты сам встречал ситуацию, похожую на то, что описал автор? Опиши свой случай одним-двумя предложениями и добавь фразу: чем твой случай похож на текст и чем отличается.' },
+  { qid: 'r3', type: 'T4-п', text: 'Согласен ли ты с тем, что написал автор? Назови место в тексте, из-за которого ты так решил, и объясни свой выбор.' },
+];
 function reflection({questions, answers}) {
   const system = 'Ты проверяешь блок рефлексии ребёнка 10 лет. Критерии НЕ правильности, а полноценности: ответ по теме вопроса, осмысленный, не пустой, не набор случайных слов. Оцени каждый ответ 0–2 (0 — мусор/пусто/не по теме, 1 — бедно но по теме, 2 — полноценно). Ответ строго JSON: {"results":[{"qid":"...","mark":0|1|2,"explanation":"..."}]}.';
   const user = questions.map((q, i) => `ВОПРОС ${q.qid}: ${q.text}\nОТВЕТ: ${(answers[i] || {}).text || '(пусто)'}`).join('\n---\n');
   return { system, user };
 }
-module.exports = { packReview, socraticQuestion, reflection, SOCRATIC_TYPES };
+module.exports = { packReview, socraticQuestion, reflection, REFLECTION_QUESTIONS, SOCRATIC_TYPES };

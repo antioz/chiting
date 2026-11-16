@@ -6,6 +6,7 @@ const auth = require('./lib/handlers/auth');
 const attempts = require('./lib/handlers/attempts');
 const review = require('./lib/handlers/review');
 const socratic = require('./lib/handlers/socratic');
+const finish = require('./lib/handlers/finish');
 
 // SECRET из env функции; jwt.init при холодном старте (index.js грузится один раз на инстанс).
 jwt.init(process.env.SECRET || C.secret);
@@ -31,6 +32,11 @@ routes['review'] = (p, ctx) => review.pack({ user: ctx.user, id: p.id });
 // Финальный переписанный ответ ребёнок отправляет через attempt-answers + повторный review.
 routes['socratic-ask'] = (p, ctx) => socratic.ask({ user: ctx.user, id: p.id, qid: p.qid });
 routes['socratic-answer'] = (p, ctx) => socratic.answer({ user: ctx.user, id: p.id, qid: p.qid, text: p.text });
+
+// Finish-контур (task-8): блок рефлексии после пакета, апрув, купон, кабинет ребёнка.
+routes.reflect = (p, ctx) => finish.reflect({ user: ctx.user, id: p.id, answers: p.answers });
+routes.approve = (p, ctx) => finish.approve({ user: ctx.user, id: p.id });
+routes.coupons = (_p, ctx) => finish.coupons({ user: ctx.user });
 
 // Список уровней для ребёнка: правило (kid_formulation), текст, delay_hours и доступность
 // по времени последнего approved-прохода (§6 методологии: проход = правило на текст).
