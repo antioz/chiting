@@ -61,6 +61,12 @@ async function ask({ user, id, qid }) {
 
   let lastOut = null;
   for (let t = 1; t <= GENERATION_TRIES; t++) {
+    // Перепроверка суммарного лимита перед КАЖДЫМ вызовом ЛЛМ: на входе в ask
+    // лимит мог быть почти достигнут (например count=11), а цикл генерации
+    // делает до 3 вызовов — иначе суммарный лимит превышался бы.
+    if ((await repo.countLlmReviews(id)) >= C.llmCallsLimit) {
+      return { status: 429, body: { error: 'llm_limit' } };
+    }
     const { system, user: userPrompt } = prompts.socraticQuestion({
       rule: { kid_formulation: level.rule_kid },
       question, childAnswer, zeroCriteria, attempts: step - 1,

@@ -113,6 +113,23 @@ test('ask: суммарный лимит 12 LLM-вызовов → 429 llm_limit
   socratic._setRepo(require('../lib/repo'));
 });
 
+test('ask: count=11 на входе, первый вопрос с эталоном → 429 llm_limit на 2-й итерации, ЛЛМ вызван 1 раз', async () => {
+  const { repo, calls } = makeRepo();
+  // Счётчик как в боевом репо: addLlmReview реально увеличивает countLlmReviews.
+  let count = 11;
+  repo.countLlmReviews = async () => count;
+  repo.addLlmReview = async (...args) => { count++; calls.reviews.push(args); };
+  socratic._setRepo(repo);
+  // Первый ответ содержит эталон → без перепроверки лимита был бы 2-й вызов.
+  socratic.setLlm(mockLlm('Ванька жалуется деду, что хозяин его избил, верно?'));
+  const res = await socratic.ask({ user: USER, id: 'a1', qid: 'q2' });
+  assert.strictEqual(res.status, 429);
+  assert.deepStrictEqual(res.body, { error: 'llm_limit' });
+  assert.strictEqual(llmCalls, 1, 'перед 2-й итерацией лимит (11+1=12) перепроверен — второй вызов не делается');
+  assert.strictEqual(calls.reviews.length, 1);
+  socratic._setRepo(require('../lib/repo'));
+});
+
 test('ask: чужой attempt → 404; статус не socratic → 409; qid не из zero_qids → 409', async () => {
   const foreign = makeRepo({ getAttempt: async () => ({ id: 'a1', user_id: 'u2', status: 'socratic', zero_qids_json: ['q2'] }) });
   socratic._setRepo(foreign.repo);
