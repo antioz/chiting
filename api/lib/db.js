@@ -80,7 +80,10 @@ const V = {
   s: v => TypedValues.utf8(String(v)),
   i: v => TypedValues.int32(Number(v)),
   u32: v => TypedValues.uint32(Number(v)),
-  u64: v => TypedValues.uint64(BigInt(v)),
+  // ВАЖНО: только Number, НЕ BigInt — TypedValues.uint64(BigInt) доезжает до YDB как 0
+  // (проверено на проде 15.11: события/attempts получали t=0 и конфликтовали по PK).
+  // Number безопасен для миллисекундных меток (<< 2^53).
+  u64: v => TypedValues.uint64(Number(v)),
   b: v => TypedValues.bool(!!v),
   ts: v => TypedValues.timestamp(v instanceof Date ? v : new Date(v)),
   j: v => TypedValues.json(JSON.stringify(v)),

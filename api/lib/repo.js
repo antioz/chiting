@@ -69,6 +69,59 @@ async function lastApprovedAttempt(userId, levelId) {
   return rs[0] && rs[0][0];
 }
 
+// --- попытки, ответы, события ---
+async function getLevel(id) {
+  const rs = await execute('SELECT id FROM levels WHERE id = $i', { $i: db.V.s(id) });
+  return rs[0] && rs[0][0];
+}
+async function getAttempt(id) {
+  const rs = await execute('SELECT * FROM attempts WHERE id = $i', { $i: db.V.s(id) });
+  return rs[0] && rs[0][0];
+}
+async function createAttempt(a) {
+  await execute(
+    'INSERT INTO attempts (id, user_id, level_id, stake, status, pass_number, socratic_count, iterations, created_at, updated_at) VALUES ($id, $u, $l, $st, $s, $pn, $sc, $it, $ca, $ua)',
+    { $id: db.V.s(a.id), $u: db.V.s(a.user_id), $l: db.V.s(a.level_id), $st: db.V.u32(a.stake), $s: db.V.s(a.status), $pn: db.V.u32(a.pass_number), $sc: db.V.u32(a.socratic_count), $it: db.V.u32(a.iterations), $ca: db.V.u64(a.created_at), $ua: db.V.u64(a.updated_at) }
+  );
+}
+// Одна запись на (attempt_id, qid): повторная отправка перезаписывает ответ.
+async function upsertAnswer(attemptId, q) {
+  await execute(
+    'REPLACE INTO answers (attempt_id, qid, text_raw, typed_chars, pasted, t_answer, updated_at) VALUES ($a, $q, $t, $tc, $p, $ta, $ua)',
+    { $a: db.V.s(attemptId), $q: db.V.s(q.qid), $t: db.V.s(q.text || ''), $tc: db.V.u32(q.keydown || 0), $p: db.V.b(!!q.pasted), $ta: db.V.u64(q.t_answer || 0), $ua: db.V.u64(Date.now()) }
+  );
+}
+async function getAnswers(attemptId) {
+  const rs = await execute('SELECT * FROM answers WHERE attempt_id = $a', { $a: db.V.s(attemptId) });
+  return rs[0] || [];
+}
+async function setAttemptStatus(id, status, now) {
+  await execute(
+    'UPDATE attempts SET status = $s, updated_at = $ua WHERE id = $i',
+    { $s: db.V.s(status), $ua: db.V.u64(now), $i: db.V.s(id) }
+  );
+}
+// Монотонность t в пределах инстанса: PK events (user_id, t) — два события в одну
+// миллисекунду дали бы "Conflict with existing key", поэтому t не убывает.
+let lastEventT = 0;
+async function addEvent(userId, attemptId, type, payload, t) {
+  t = Math.max(Number(t) || 0, Date.now(), lastEventT + 1);
+  // PK events (user_id, t): при параллельных инстансах t может совпасть — поднимаем и повторяем.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await execute(
+        'INSERT INTO events (user_id, attempt_id, type, payload_json, t) VALUES ($u, $a, $ty, $p, $t)',
+        { $u: db.V.s(userId), $a: db.V.s(attemptId), $ty: db.V.s(type), $p: db.V.j(payload || {}), $t: db.V.u64(t) }
+      );
+      lastEventT = t;
+      return;
+    } catch (e) {
+      if (attempt < 3 && /Conflict with existing key|Constraint violated|PreconditionFailed/i.test(String(e && e.message))) { t = ++lastEventT; continue; }
+      throw e;
+    }
+  }
+}
+
 function safeParse(j, dflt) { try { return typeof j === 'string' ? JSON.parse(j) : (j || dflt); } catch { return dflt; } }
 
-module.exports = { execute, getUserByLogin, createUser, inviteUse, waitlistAdd, levels, answerBases, lastApprovedAttempt };
+module.exports = { execute, getUserByLogin, createUser, inviteUse, waitlistAdd, levels, answerBases, lastApprovedAttempt, getLevel, getAttempt, createAttempt, upsertAnswer, getAnswers, setAttemptStatus, addEvent };
