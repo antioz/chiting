@@ -51,16 +51,21 @@ async function countLlmReviews(attemptId) {
   return row ? Number(row.n) : 0;
 }
 // Одна запись = один LLM-вызов (pack — один вызов на весь пакет, qid='pack').
-// REPLACE INTO: повторный review после 502 (клиентский ретрай) перезаписывает
-// запись с тем же PK (attempt_id, iteration, scope, qid) — без PK-конфликта,
-// число строк по attempt не растёт → лимит countLlmReviews не ломается.
+// Append-only: PK (attempt_id, iteration, scope, qid) получает iteration = числу
+// уже записанных вызовов этого attempt — следующий свободный индекс. REPLACE INTO
+// фактически никогда не перезаписывает (PK всегда новый): повторные вызовы и
+// ретраи остаются отдельными строками, countLlmReviews = истинное число вызовов,
+// лимит llmCallsLimit не протекает. Гонка двух параллельных HTTP-запросов
+// допустима: обе строки останутся, что и есть цель. iteration из аргумента
+// игнорируется — назначение PK централизовано здесь.
 async function addLlmReview(r) {
+  const iteration = await countLlmReviews(r.attempt_id);
   await execute(
     `REPLACE INTO llm_reviews (attempt_id, iteration, scope, qid, criteria_json, total, final_mark, verdict, explanation,
                               rubric_version, request_json, response_json, tokens_in, tokens_out, cost_rub, t_spent, created_at)
      VALUES ($a, $it, $sc, $q, $cj, $to, $fm, $v, $e, $rv, $req, $resp, $ti, $tout, $c, $ts, $ca)`,
     {
-      $a: db.V.s(r.attempt_id), $it: db.V.u32(r.iteration || 0), $sc: db.V.s(r.scope), $q: db.V.s(r.qid || 'pack'),
+      $a: db.V.s(r.attempt_id), $it: db.V.u32(iteration), $sc: db.V.s(r.scope), $q: db.V.s(r.qid || 'pack'),
       $cj: db.V.j(r.criteria_json || []), $to: db.V.u32(r.total || 0), $fm: db.V.u32(r.final_mark || 0),
       $v: db.V.s(r.verdict || ''), $e: db.V.s(r.explanation || ''), $rv: db.V.s(r.rubric_version || ''),
       $req: db.V.j(r.request_json || {}), $resp: db.V.j(r.response_json || {}),

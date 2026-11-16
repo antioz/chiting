@@ -71,8 +71,8 @@ test('ask: вопрос содержит эталон → генерация п�
   assert.strictEqual(res.body.question, 'Покажи место в тексте, где герой молит о помощи.');
   assert.strictEqual(llmCalls, 2);
   assert.strictEqual(calls.reviews.length, 2, 'каждый вызов ЛЛМ — запись в llm_reviews');
-  assert.notStrictEqual(calls.reviews[0][0].iteration, calls.reviews[1][0].iteration,
-    'PK (attempt, iteration, scope, qid): у повторов iteration должен отличаться, иначе REPLACE INTO схлопнет записи');
+  assert.ok(!('iteration' in calls.reviews[0][0]) && !('iteration' in calls.reviews[1][0]),
+    'iteration назначает repo.addLlmReview (append-only: следующий свободный индекс = countLlmReviews)');
   socratic._setRepo(require('../lib/repo'));
 });
 

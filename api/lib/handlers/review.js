@@ -42,7 +42,6 @@ async function pack({ user, id }) {
   const questions = level.questions.filter(q => scopeQids.has(q.qid));
   const answers = rawAnswers.filter(a => scopeQids.has(a.qid)).map(a => ({ ...a, text: a.text_raw }));
   const answerBases = bases.filter(b => scopeQids.has(b.level_qid));
-  const iteration = Number(attempt.iterations || 0);
   const tStart = Date.now();
 
   const { system, user: userPrompt } = prompts.packReview({
@@ -59,7 +58,7 @@ async function pack({ user, id }) {
   let out = await llm.complete(system, withText);
   let results = rubric.parseLlmResults(out.text);
   await repo.addLlmReview({
-    attempt_id: id, iteration, scope: 'pack', qid: 'pack', rubric_version: C.rubricVersion,
+    attempt_id: id, scope: 'pack', qid: 'pack', rubric_version: C.rubricVersion,
     request_json: { system, user: withText }, response_json: { text: out.text },
     tokens_in: out.tokensIn, tokens_out: out.tokensOut, cost_rub: out.costRub, t_spent: tStart,
   });
@@ -70,7 +69,7 @@ async function pack({ user, id }) {
     out = await llm.complete(retrySystem, withText);
     results = rubric.parseLlmResults(out.text);
     await repo.addLlmReview({
-      attempt_id: id, iteration, scope: 'pack_retry', qid: 'pack', rubric_version: C.rubricVersion,
+      attempt_id: id, scope: 'pack_retry', qid: 'pack', rubric_version: C.rubricVersion,
       request_json: { system: retrySystem, user: withText }, response_json: { text: out.text },
       tokens_in: out.tokensIn, tokens_out: out.tokensOut, cost_rub: out.costRub, t_spent: tStart,
     });

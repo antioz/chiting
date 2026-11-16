@@ -74,11 +74,11 @@ async function ask({ user, id, qid }) {
     const tStart = Date.now();
     const out = await llm.complete(system, userPrompt);
     lastOut = out;
-    // PK llm_reviews (attempt, iteration, scope, qid): для socratic iteration кодирует
-    // step*10+попытка — иначе REPLACE INTO перезаписал бы повторные вызовы и лимит
-    // countLlmReviews занижался бы.
+    // PK/iteration назначает repo.addLlmReview (append-only, следующий свободный
+    // индекс = countLlmReviews) — здесь iteration не передаём, повторные вызовы
+    // цикла генерации остаются отдельными строками.
     await repo.addLlmReview({
-      attempt_id: id, iteration: step * 10 + t, scope: 'socratic', qid, rubric_version: C.rubricVersion,
+      attempt_id: id, scope: 'socratic', qid, rubric_version: C.rubricVersion,
       request_json: { system, user: userPrompt }, response_json: { text: out.text },
       tokens_in: out.tokensIn, tokens_out: out.tokensOut, cost_rub: out.costRub, t_spent: tStart,
     });

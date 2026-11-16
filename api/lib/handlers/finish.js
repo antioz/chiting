@@ -1,6 +1,6 @@
 // Finish-контур (task-8): рефлексия после пакета → апрув → купон.
-// reflect: один вызов ЛЛМ (scope='reflection', iteration 51 — вне диапазонов pack 0..2
-// и socratic 11..43), запись reflection_answers (REPLACE — переписывание нулевых).
+// reflect: один вызов ЛЛМ (scope='reflection'; PK/iteration назначает repo —
+// append-only, следующий свободный индекс), запись reflection_answers (REPLACE — переписывание нулевых).
 // mark=0 в любом ответе → {retry_qids} без смены статуса. approve: все marks != 0 →
 // купон (amount=ставка), status='approved', событие approve; повторный approve идемпотентен.
 const crypto = require('crypto');
@@ -37,7 +37,7 @@ async function reflect({ user, id, answers }) {
   const tStart = Date.now();
   const out = await llm.complete(system, userPrompt);
   await repo.addLlmReview({
-    attempt_id: id, iteration: 51, scope: 'reflection', qid: 'pack', rubric_version: C.rubricVersion,
+    attempt_id: id, scope: 'reflection', qid: 'pack', rubric_version: C.rubricVersion,
     request_json: { system, user: userPrompt }, response_json: { text: out.text },
     tokens_in: out.tokensIn, tokens_out: out.tokensOut, cost_rub: out.costRub, t_spent: tStart,
   });

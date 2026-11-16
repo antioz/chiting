@@ -65,7 +65,7 @@ test('reflect: happy path → marks, reflection_answers записаны, llm_re
   assert.ok(rec.explanation);
   assert.strictEqual(state.calls.reviews.length, 1);
   assert.strictEqual(state.calls.reviews[0].scope, 'reflection');
-  assert.strictEqual(state.calls.reviews[0].iteration, 51);
+  assert.ok(!('iteration' in state.calls.reviews[0]), 'iteration назначает repo (append-only), handler не передаёт');
   assert.strictEqual(state.calls.reviews[0].tokens_in, 80);
   assert.strictEqual(state.calls.reviews[0].cost_rub, 0.024);
   assert.match(lastPrompt, /мольба/, 'ответы ребёнка доехали до ЛЛМ');

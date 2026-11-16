@@ -137,22 +137,80 @@ test('pack: не-JSON → 502, повторный review тем же PK → ус
   assert.strictEqual(r2.body.status, 'reflection');
 });
 
-test('repo: addLlmReview — повторная запись с тем же PK (REPLACE INTO), без конфликта', async () => {
+test('repo: addLlmReview — append-only, iteration = countLlmReviews (следующий свободный индекс)', async () => {
   const db = require('../lib/db');
   const realReady = db.ready, realQuery = db.query;
   const yqlLog = [];
+  let rows = 0; // имитация таблицы: SELECT COUNT возвращает число уже вставленных строк
   db.ready = async () => {};
-  db.query = async (yql) => { yqlLog.push(yql); return [[]]; };
+  db.query = async (yql) => {
+    yqlLog.push(yql);
+    if (/^SELECT COUNT/.test(yql)) return [[{ n: rows }]];
+    rows++;
+    return [[]];
+  };
   try {
     const repo = require('../lib/repo');
-    const row = { attempt_id: 'a1', iteration: 0, scope: 'pack', qid: 'pack' };
+    const row = { attempt_id: 'a1', scope: 'pack', qid: 'pack' };
     await repo.addLlmReview(row);
-    await repo.addLlmReview(row); // повтор после 502 — то же значение PK, не должно быть исключения
-    assert.strictEqual(yqlLog.length, 2);
-    assert.match(yqlLog[0], /^REPLACE INTO llm_reviews/, 'addLlmReview пишет через REPLACE INTO (идемпотентность)');
+    await repo.addLlmReview(row); // повторный вызов — НОВАЯ строка, не перезапись
+    await repo.addLlmReview({ attempt_id: 'a1', scope: 'reflection', qid: 'pack' });
+    assert.strictEqual(rows, 3, 'три вызова — три строки в llm_reviews');
+    const replaces = yqlLog.filter(y => /^REPLACE INTO llm_reviews/.test(y));
+    assert.strictEqual(replaces.length, 3);
+    assert.match(replaces[0], /\$it/, 'PK назначает repo (iteration из аргумента игнорируется)');
   } finally {
     db.ready = realReady; db.query = realQuery;
   }
+});
+
+test('reflect: три повторных вызова → три строки llm_reviews, countLlmReviews=3', async () => {
+  const finish = require('../lib/handlers/finish');
+  const rows = [];
+  let count = 0;
+  const repo = {
+    getAttempt: async () => ({ id: 'a1', user_id: 'u1', level_id: 'lvl1', status: 'reflection' }),
+    countLlmReviews: async () => count,
+    addLlmReview: async (r) => { count++; rows.push(r); },
+    addReflectionAnswer: async () => {},
+    addEvent: async () => {},
+  };
+  finish._setRepo(repo);
+  finish.setLlm(async () => ({
+    text: JSON.stringify({ results: [
+      { qid: 'r1', mark: 1, explanation: 'ок' },
+      { qid: 'r2', mark: 1, explanation: 'ок' },
+      { qid: 'r3', mark: 1, explanation: 'ок' },
+    ] }),
+    tokensIn: 10, tokensOut: 5, costRub: 0.01,
+  }));
+  const answers = ['а', 'б', 'в'];
+  for (let i = 0; i < 3; i++) {
+    const res = await finish.reflect({ user: USER, id: 'a1', answers });
+    assert.strictEqual(res.status, undefined, 'reflect успешен');
+  }
+  finish._setRepo(require('../lib/repo'));
+  finish.setLlm(require('../lib/llm').complete);
+  assert.strictEqual(rows.length, 3, 'каждый вызов ЛЛМ — отдельная строка (append-only)');
+  assert.strictEqual(count, 3, 'countLlmReviews = истинное число вызовов');
+});
+
+test('reflect: countLlmReviews=12 → 429 llm_limit, ЛЛМ не вызывается', async () => {
+  const finish = require('../lib/handlers/finish');
+  const repo = {
+    getAttempt: async () => ({ id: 'a1', user_id: 'u1', level_id: 'lvl1', status: 'reflection' }),
+    countLlmReviews: async () => 12,
+    addLlmReview: async () => { throw new Error('не должен писать'); },
+  };
+  finish._setRepo(repo);
+  let called = 0;
+  finish.setLlm(async () => { called++; return { text: '' }; });
+  const res = await finish.reflect({ user: USER, id: 'a1', answers: ['а', 'б', 'в'] });
+  finish._setRepo(require('../lib/repo'));
+  finish.setLlm(require('../lib/llm').complete);
+  assert.strictEqual(res.status, 429);
+  assert.deepStrictEqual(res.body, { error: 'llm_limit' });
+  assert.strictEqual(called, 0);
 });
 
 test('pack: чужой attempt → 404; статус не answering → 409', async () => {
