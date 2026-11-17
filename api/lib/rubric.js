@@ -4,14 +4,27 @@ function finalMark(criteria) {
   if (total >= 7) return { total, mark: 2 };
   return { total, mark: 1 };
 }
+// yandexgpt-lite иногда рвёт JSON на границе токенов (нет финальной '}'). Парсим с
+// автодозакрытием: ищем от первой '{' с "criteria" до конца, снимаем ```-обёртку,
+// пробуем JSON.parse и до 3 недостающих закрывающих символов из ['}', '"', ']'].
 function parseLlmJson(text) {
-  const m = String(text).match(/\{[\s\S]*"criteria"[\s\S]*\}/);
-  if (!m) return null;
-  try {
-    const o = JSON.parse(m[0]);
-    if (!Array.isArray(o.criteria) || o.criteria.length !== 5 || !o.criteria.every(x => [0,1,2].includes(x))) return null;
-    return { criteria: o.criteria, explanation: String(o.explanation || '').slice(0, 2000) };
-  } catch { return null; }
+  let s = String(text).replace(/```(?:json)?/g, ' ');
+  const start = s.search(/\{[\s\S]*"criteria"/);
+  if (start < 0) return null;
+  s = s.slice(start).trim();
+  const tryParse = (candidate) => {
+    try {
+      const o = JSON.parse(candidate);
+      if (!Array.isArray(o.criteria) || o.criteria.length !== 5 || !o.criteria.every(x => [0,1,2].includes(x))) return null;
+      return { criteria: o.criteria, explanation: String(o.explanation || '').slice(0, 2000) };
+    } catch { return null; }
+  };
+  const closers = ['', '}', '"}', '"]', '"}]'];
+  for (const c of closers) {
+    const r = tryParse(s + c);
+    if (r) return r;
+  }
+  return null;
 }
 // Пакетный формат ответа packReview: {"results":[{"qid","criteria":[0-2 x5],"explanation"}]}.
 // Строгость та же: ровно 5 критериев со значениями 0–2, без markdown вокруг JSON (кроме обёртки ```).
