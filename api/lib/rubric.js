@@ -4,6 +4,35 @@ function finalMark(criteria) {
   if (total >= 7) return { total, mark: 2 };
   return { total, mark: 1 };
 }
+// Нормализация оценки: принимаем числа 0/1/2 и числовые строки "0"/"1"/"2" (и 0.0 → 0).
+// Отвергаем NaN, дробные 0.5, значения вне 0–2, пустые строки. Возвращаем число или null.
+function normScore(x) {
+  if (typeof x === 'string') {
+    x = x.trim();
+    if (x === '') return null;
+  }
+  const n = Number(x);
+  if (!Number.isInteger(n) || n < 0 || n > 2) return null;
+  return n;
+}
+function normCriteria(arr) {
+  if (!Array.isArray(arr) || arr.length !== 5) return null;
+  const out = arr.map(normScore);
+  return out.includes(null) ? null : out;
+}
+// Запасной разбор: JSON сломан (оборванная строка и т.п.) — тянем criteria и explanation
+// регэкспами. Числа и числовые строки через normScore, мусор → null.
+function salvageCriteria(s) {
+  const cm = s.match(/"criteria"\s*:\s*\[([^\]]*)/);
+  if (!cm) return null;
+  const parts = cm[1].split(',').map(p => p.replace(/["\s\]]/g, '')).filter(p => p !== '');
+  const criteria = normCriteria(parts);
+  if (!criteria) return null;
+  const em = s.match(/"explanation"\s*:\s*"((?:[^"\\]|\\.)*)"?/);
+  let explanation = '';
+  if (em) { try { explanation = JSON.parse('"' + em[1] + '"'); } catch { explanation = em[1]; } }
+  return { criteria, explanation: String(explanation || '').slice(0, 2000) };
+}
 // yandexgpt-lite иногда рвёт JSON на границе токенов (нет финальной '}'). Парсим с
 // автодозакрытием: ищем от первой '{' с "criteria" до конца, снимаем ```-обёртку,
 // пробуем JSON.parse и до 3 недостающих закрывающих символов из ['}', '"', ']'].
@@ -15,16 +44,18 @@ function parseLlmJson(text) {
   const tryParse = (candidate) => {
     try {
       const o = JSON.parse(candidate);
-      if (!Array.isArray(o.criteria) || o.criteria.length !== 5 || !o.criteria.every(x => [0,1,2].includes(x))) return null;
-      return { criteria: o.criteria, explanation: String(o.explanation || '').slice(0, 2000) };
+      const criteria = normCriteria(o.criteria);
+      if (!criteria) return null;
+      return { criteria, explanation: String(o.explanation || '').slice(0, 2000) };
     } catch { return null; }
   };
-  const closers = ['', '}', '"}', '"]', '"}]'];
+  const closers = ['', '}', '"}', '"]', '"}]', '"}]}'];
   for (const c of closers) {
     const r = tryParse(s + c);
     if (r) return r;
   }
-  return null;
+  // JSON не собрался никак — пробуем вытащить criteria/explanation регэкспами.
+  return salvageCriteria(s);
 }
 // Пакетный формат ответа packReview: {"results":[{"qid","criteria":[0-2 x5],"explanation"}]}.
 // Строгость та же: ровно 5 критериев со значениями 0–2, без markdown вокруг JSON (кроме обёртки ```).
@@ -36,10 +67,10 @@ function parseLlmResults(text) {
     if (!Array.isArray(o.results) || o.results.length === 0) return null;
     const results = o.results.map(r => ({
       qid: String(r.qid || ''),
-      criteria: r.criteria,
+      criteria: normCriteria(r.criteria),
       explanation: String(r.explanation || '').slice(0, 2000),
     }));
-    if (results.some(r => !r.qid || !Array.isArray(r.criteria) || r.criteria.length !== 5 || !r.criteria.every(x => [0, 1, 2].includes(x)))) return null;
+    if (results.some(r => !r.qid || !r.criteria)) return null;
     return results;
   } catch { return null; }
 }
@@ -62,10 +93,10 @@ function parseLlmReflectionResults(text) {
       if (!Array.isArray(o.results) || o.results.length === 0) return null;
       const results = o.results.map(r => ({
         qid: String(r.qid || ''),
-        mark: Number(r.mark),
+        mark: normScore(r.mark),
         explanation: String(r.explanation || '').slice(0, 2000),
       }));
-      if (results.some(r => !r.qid || ![0, 1, 2].includes(r.mark))) return null;
+      if (results.some(r => !r.qid || r.mark === null)) return null;
       return results;
     } catch { /* следующий кандидат */ }
   }
