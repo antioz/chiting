@@ -360,6 +360,10 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ---------- Экран 4: вопрос по шагам ----------
+// Счётчики нажатий храним ПО ВОПРОСАМ и накопительно: экран перерисовывается
+// после вердиктов, а текст ответа сохраняется — сбрасывать keydown нельзя (ложный «копипаст»).
+S.typed = S.typed || {};
+
 // Режимы S.q.mode: 'answer' (поле + «Готово») | 'verdict' (оценка) | 'socratic' (диалог).
 function startQuestion(idx) {
   const q = S.questions[idx];
@@ -375,9 +379,7 @@ function startQuestion(idx) {
     socratic: null,           // {question, step, history:[{q,a}]}
     llmLimit: false,
   };
-  if (prevMark && prevMark.mark < 1) {
-    // Повторный заход на заваленный вопрос: сохранить нечего (текст не храним на сервере без answer).
-  }
+  S.q.keydown = (S.typed[q.qid] || {}).keydown || 0;
   renderQuestion();
   show('question');
 }
@@ -407,9 +409,10 @@ function renderQuestion() {
     ta.id = 'q-answer';
     ta.placeholder = 'Напиши ответ своими словами…';
     ta.value = S.q.text;
-    S.q.keydown = 0;
-    S.q.pasted = false;
-    ta.addEventListener('keydown', () => { S.q.keydown += 1; });
+    ta.addEventListener('keydown', () => {
+      S.q.keydown += 1;
+      S.typed[S.q.qid] = { keydown: S.q.keydown };
+    });
     ta.addEventListener('paste', (e) => {
       e.preventDefault();
       warnInline(body, 'Вставка не работает — напечатай ответ сам. Так честнее.');
@@ -519,7 +522,6 @@ async function submitAnswer(ta, btn) {
       S.q.mode = 'verdict';
       renderQuestion();
     } else if (ex.code === 'suspicious') {
-      S.q.keydown = 0;
       warnInline(body, ex.message);
     } else {
       notify(ex.message);
