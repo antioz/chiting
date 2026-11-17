@@ -1,4 +1,6 @@
-/* Читинг — фронтенд. Статика, без сборки. */
+/* Читинг — фронтенд. Статика, без сборки.
+   Пошаговый флоу (task-15): текст → вопросы по одному (одна кнопка «Готово»)
+   → оценка review-question → сократ со 2-й неудачи → рефлексия → купон. */
 'use strict';
 
 // ---------- Конфиг ----------
@@ -38,7 +40,7 @@ const LEVEL_QUESTIONS = {
   ],
 };
 
-// Вопросы рефлексии — из api/lib/prompts.js (бэкенд их тоже не отдаёт).
+// Вопросы рефлексии — из api/lib/prompts.js (бэкенд их не отдаёт).
 const REFLECTION_QUESTIONS = [
   { qid: 'r1', text: 'Прочитай пакет ещё раз в голове. Какое слово из текста тебе показалось самым важным? Самым ярким? Самым неожиданным? А может, запомнилась не фраза, а мысль? Расскажи: что в тебе отозвалось в этот момент?' },
   { qid: 'r2', text: 'Где ты сам встречал ситуацию, похожую на то, что описал автор? Опиши свой случай одним-двумя предложениями и добавь фразу: чем твой случай похож на текст и чем отличается.' },
@@ -68,7 +70,6 @@ async function api(action, params = {}) {
   let data = null;
   try { data = await resp.json(); } catch { /* пустое тело */ }
   if (resp.status === 401) {
-    // Единый 401-хендлер: любой запрос с протухшим токеном → сброс сессии и экран входа.
     sessionExpired();
     throw new ApiError(401, 'unauthorized', 'Сессия закончилась — войди снова.');
   }
@@ -89,13 +90,13 @@ function errorText(status, code) {
     bad_credentials: 'Неверное имя или пароль. Проверь и попробуй ещё раз.',
     validation: 'Проверь, что все поля заполнены правильно.',
     suspicious: 'Похоже на копипаст. Ответы должны быть напечатаны, а не вставлены — перепиши своими словами.',
-    not_answering: 'Ответы уже отправлены. Дальше — работа с вопросами, где не получилось.',
-    not_socratic: 'Сейчас не время сократовского диалога.',
+    not_editable: 'Этот ответ уже проверен. Иди дальше.',
+    no_answer: 'Сначала напиши ответ, потом жми «Готово».',
     not_reflection: 'Сначала нужно пройти проверку ответов.',
     reflection_incomplete: 'Сначала допиши рефлексию: все три ответа должны засчитаться.',
-    socratic_limit: 'Давай сделаем паузу и подумаем самостоятельно — ты уже почти у цели.',
-    llm_limit: 'На сегодня вопросов к нейронке хватит — твои ответы уже засчитаны, продолжай писать сам.',
-    socratic_filter: 'Подсказка сбилась — попробуй ещё разок или возьми обычную подсказку.',
+    socratic_limit: 'Подсказки к этому вопросу закончились — теперь напиши ответ сам, как понимаешь.',
+    llm_limit: 'Вопросов к нейронке на сегодня хватит — напиши ответ как получится, взрослый всё увидит.',
+    socratic_filter: 'Подсказка сбилась — попробуй ещё разок.',
     llm_parse: 'Проверяльщик сбился. Попробуй ещё раз через минуту.',
     not_iterable: 'Этот шаг сейчас недоступен.',
     already_split: 'Разбивка уже прошла — продолжай с новой попыткой.',
@@ -111,7 +112,7 @@ function el(tag, cls, text) {
   if (text != null) n.textContent = text;
   return n;
 }
-function ts(v) { // created_at: число мс или {low,high}
+function ts(v) {
   if (v == null) return null;
   if (typeof v === 'number') return v;
   if (typeof v === 'object') return (v.low >>> 0) + (v.high >>> 0) * 4294967296;
@@ -122,7 +123,6 @@ function fmtDate(v) {
   if (!t) return '—';
   return new Date(t).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
 }
-function esc(s) { return String(s == null ? '' : s); }
 
 const STATUS_NAMES = {
   reading: 'читает', answering: 'отвечает', socratic: 'разбирает ошибки',
@@ -131,22 +131,18 @@ const STATUS_NAMES = {
 
 // ---------- Состояние ----------
 const S = {
-  mode: 'login',          // login | register
+  mode: 'login',
   levels: [],
-  level: null,            // выбранный уровень
-  attempt: null,          // активный attempt
-  questions: [],          // вопросы текущего attempt
-  marks: null,
-  resultStatus: null,
-  reviewedQids: [],
-  zeroQids: [],
-  socratic: {},           // qid -> {question, step, answers:[]}
+  level: null,
+  attempt: null,
+  questions: [],
+  marks: {},              // qid -> {mark, explanation}
+  q: null,                // состояние текущего вопроса (см. startQuestion)
   reflections: [],
-  answerStats: {},        // qid -> {keydown, pasted}
 };
 
 // ---------- Роутинг экранов ----------
-const SCREENS = ['auth', 'levels', 'reader', 'result', 'reflection', 'approve', 'cabinet'];
+const SCREENS = ['auth', 'levels', 'reader', 'question', 'reflection', 'approve', 'cabinet'];
 function show(name) {
   for (const s of SCREENS) $('#screen-' + s).classList.toggle('hidden', s !== name);
   $('#topbar').classList.toggle('hidden', name === 'auth');
@@ -235,12 +231,11 @@ function renderLevels() {
         btn.disabled = true;
         try {
           if (lv.split && lv.split.attempt_id) {
-            // Продолжение после разбивки: ставка уже задана в открытом attempt — валидация input не нужна (M2).
             await loadAttempt(lv.split.attempt_id);
           } else {
             const stake = parseInt(input.value, 10);
             if (!Number.isInteger(stake) || stake < 1 || stake > 100000) {
-              input.style.borderColor = 'var(--red)';
+              input.style.borderColor = 'var(--bad)';
               btn.disabled = false;
               return;
             }
@@ -260,13 +255,10 @@ function renderLevels() {
   }
 }
 
-// ---------- Экран 3: читалка ----------
-let readTimer = null, readingActive = false;
-
+// ---------- Загрузка attempt ----------
 async function loadAttempt(attemptId) {
   const r = await api('attempt-get', { __get: true, id: attemptId });
   S.attempt = r.attempt;
-  // Вопросы — из ответа attempt-get (task-12). Fallback на DEPRECATED-копию только для старого бэка.
   let questions = Array.isArray(r.questions) && r.questions.length ? r.questions : null;
   if (!questions) {
     const all = LEVEL_QUESTIONS[S.attempt.level_id] || [];
@@ -274,28 +266,45 @@ async function loadAttempt(attemptId) {
       ? all.filter(q => q.fragment_ref === r.fragment.id || q.fragment_ref === 'whole')
       : all;
   } else if (r.split && questions.some(q => 'in_scope' in q)) {
-    // Новый бэк: берём только вопросы зоны split-фрагмента (флаг in_scope).
     questions = questions.filter(q => q.in_scope !== false);
   }
   S.questions = questions;
-  S.textPayload = r.text;       // строка (фактический контракт) или объект
+  S.textPayload = r.text;
   S.fragment = r.fragment || null;
-  S.marks = null; S.zeroQids = []; S.socratic = {}; S.answerStats = {};
-  // Resume: attempt уже прошёл review (перезагрузка страницы / возврат позже) —
-  // marks лежат в attempt.marks_json, показываем сразу экран результата.
-  let marksJson = null;
-  try { marksJson = S.attempt.marks_json ? JSON.parse(S.attempt.marks_json) : null; } catch { marksJson = null; }
-  if (marksJson && (S.attempt.status === 'socratic' || S.attempt.status === 'reflection')) {
-    S.marks = marksJson;
-    S.resultStatus = S.attempt.status;
-    try { S.zeroQids = JSON.parse(S.attempt.zero_qids_json || '[]'); } catch { S.zeroQids = []; }
-    S.reviewedQids = Object.keys(marksJson);
-    renderResult();
-    show('result');
+  S.q = null;
+  S.marks = {};
+  try { S.marks = S.attempt.marks_json ? JSON.parse(S.attempt.marks_json) : {}; } catch { S.marks = {}; }
+
+  // Resume: рефлексия уже открыта — сразу туда.
+  if (S.attempt.status === 'reflection') {
+    renderReflection();
+    show('reflection');
+    return;
+  }
+  // Resume: часть вопросов уже оценена — продолжаем с первого без mark>=1.
+  if (S.attempt.status === 'answering' && Object.keys(S.marks).length) {
+    const nextIdx = firstUnpassedIdx();
+    if (nextIdx === -1) {
+      // Все in_scope оценены, но статус ещё answering (гонка) — перечитаем состояние.
+      const r2 = await api('attempt-get', { __get: true, id: attemptId });
+      S.attempt = r2.attempt;
+      if (S.attempt.status === 'reflection') { renderReflection(); show('reflection'); return; }
+      startQuestion(0);
+      return;
+    }
+    startQuestion(nextIdx);
     return;
   }
   renderReader();
   show('reader');
+}
+
+function firstUnpassedIdx() {
+  for (let i = 0; i < S.questions.length; i++) {
+    const m = S.marks[S.questions[i].qid];
+    if (!m || m.mark < 1) return i;
+  }
+  return -1;
 }
 
 function readerTextString() {
@@ -306,10 +315,14 @@ function readerTextString() {
   return String(t.text || '');
 }
 
+// ---------- Экран 3: читалка ----------
+let readTimer = null, readingActive = false;
+
 function renderReader() {
   stopReading();
   const lv = S.levels.find(l => l.id === S.attempt.level_id) || {};
-  $('#reader-title').textContent = S.fragment ? `Фрагмент: ${S.fragment.title || ''}` : (lv.text_title || 'Текст');
+  $('#reader-kicker').textContent = S.fragment ? 'Фрагмент' : 'Текст';
+  $('#reader-title').textContent = S.fragment ? (S.fragment.title || 'Фрагмент') : (lv.text_title || 'Текст');
   $('#reader-rule').textContent = 'Правило: ' + (lv.rule || lv.kid_formulation || '');
   const textWrap = $('#reader-text');
   textWrap.innerHTML = '';
@@ -317,65 +330,7 @@ function renderReader() {
     textWrap.append(el('div', 'reader-fragment-title', S.fragment.title || 'Фрагмент'));
   }
   textWrap.append(document.createTextNode(readerTextString()));
-
-  // вкладки
-  setReaderTab('text');
-
-  // вопросы
-  const qWrap = $('#reader-questions');
-  qWrap.innerHTML = '';
-  $('#answers-warning').classList.add('hidden');
-  for (const q of S.questions) {
-    const card = el('div', 'q-card');
-    const qt = el('p', 'q-text', q.text);
-    const ta = el('textarea', 'input');
-    ta.dataset.qid = q.qid;
-    ta.id = 'ans-' + q.qid;
-    S.answerStats[q.qid] = { keydown: 0, pasted: false };
-    ta.addEventListener('keydown', () => { S.answerStats[q.qid].keydown += 1; });
-    ta.addEventListener('paste', (e) => {
-      e.preventDefault();
-      // Вставка заблокирована — текст в поле не попал, флаг pasted не ставим:
-      // иначе честно напечатанный после предупреждения ответ останется «клеймённым».
-      warn('Вставка не работает — напечатай ответ сам. Так честнее.');
-    });
-    ta.addEventListener('drop', (e) => { e.preventDefault(); });
-    ta.addEventListener('dragover', (e) => e.preventDefault());
-    const count = el('div', 'q-count', 'Напечатано символов с клавиатуры: 0');
-    ta.addEventListener('input', () => { count.textContent = `Напечатано символов с клавиатуры: ${S.answerStats[q.qid].keydown}`; });
-    const actions = el('div', 'q-actions');
-    const hintBtn = el('button', 'btn btn-ghost', 'Подсказка');
-    hintBtn.onclick = async () => {
-      hintBtn.disabled = true;
-      try {
-        const r = await api('hint', { id: S.attempt.id, qid: q.qid });
-        const box = card.querySelector('.q-hint') || el('div', 'q-hint');
-        box.textContent = (r.hint && r.hint.text) || 'Подумай ещё немного.';
-        if (!box.parentNode) card.append(box);
-      } catch (ex) { notify(ex.message); }
-      hintBtn.disabled = false;
-    };
-    actions.append(hintBtn, count);
-    card.append(qt, ta, actions);
-    qWrap.append(card);
-  }
-}
-
-let warningTimer = null;
-function warn(msg) {
-  const w = $('#answers-warning');
-  w.textContent = msg;
-  w.classList.remove('hidden');
-  clearTimeout(warningTimer);
-  warningTimer = setTimeout(() => w.classList.add('hidden'), 5000);
-}
-
-function setReaderTab(tab) {
-  $('#reader-tab-text').classList.toggle('active', tab === 'text');
-  $('#reader-tab-questions').classList.toggle('active', tab === 'questions');
-  $('#reader-text-pane').classList.toggle('hidden', tab !== 'text');
-  $('#reader-questions-pane').classList.toggle('hidden', tab !== 'questions');
-  if (tab === 'text') startReading(); else pauseReading();
+  startReading();
 }
 
 function startReading() {
@@ -399,192 +354,285 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     api('attempt-event', { id: S.attempt.id, type: 'switch' }).catch(() => {});
     if (readingActive) pauseReading();
-  } else if (!$('#screen-reader').classList.contains('hidden') && !$('#reader-text-pane').classList.contains('hidden')) {
+  } else if (!$('#screen-reader').classList.contains('hidden')) {
     startReading();
   }
 });
 
-async function submitAnswers() {
-  const answers = [];
-  let pastedWarn = false;
-  for (const q of S.questions) {
-    const ta = $('#ans-' + q.qid);
-    const text = ta.value.trim();
-    const st = S.answerStats[q.qid];
-    if (!text) { warn('Заполни все ответы — даже коротко.'); ta.focus(); return; }
-    if (st.pasted || (text.length > 40 && st.keydown < text.length * 0.9)) pastedWarn = true;
-    answers.push({ qid: q.qid, text, keydown: st.keydown, pasted: !!st.pasted, t_answer: Date.now() });
+// ---------- Экран 4: вопрос по шагам ----------
+// Режимы S.q.mode: 'answer' (поле + «Готово») | 'verdict' (оценка) | 'socratic' (диалог).
+function startQuestion(idx) {
+  const q = S.questions[idx];
+  const prevMark = S.marks[q.qid];
+  S.q = {
+    idx,
+    qid: q.qid,
+    mode: 'answer',
+    text: '',                 // текущий (последний отправленный) текст ответа
+    keydown: 0,
+    pasted: false,
+    verdict: null,            // {mark, explanation}
+    socratic: null,           // {question, step, history:[{q,a}]}
+    llmLimit: false,
+  };
+  if (prevMark && prevMark.mark < 1) {
+    // Повторный заход на заваленный вопрос: сохранить нечего (текст не храним на сервере без answer).
   }
-  if (pastedWarn && !confirm('Похоже, часть ответов вставлена, а не напечатана. Честные ответы — напечатанные. Точно отправить?')) return;
-  const btn = $('#answers-submit');
+  renderQuestion();
+  show('question');
+}
+
+function updateProgress() {
+  const total = S.questions.length;
+  const idx = S.q.idx;
+  $('#q-progress-label').textContent = `Вопрос ${idx + 1} из ${total}`;
+  const passed = S.questions.filter(q => (S.marks[q.qid] || {}).mark >= 1).length;
+  const frac = Math.max(passed / total, (idx) / total);
+  $('#q-progress-fill').style.width = Math.round(frac * 100) + '%';
+}
+
+function renderQuestion() {
+  updateProgress();
+  const body = $('#question-body');
+  body.innerHTML = '';
+  const q = S.questions[S.q.idx];
+
+  if (S.q.mode === 'socratic') return renderSocratic(body, q);
+
+  // Вопрос (формулировка) виден в режиме ответа и в режиме оценки.
+  body.append(el('p', 'q-text', q.text));
+
+  if (S.q.mode === 'answer') {
+    const ta = el('textarea', 'input');
+    ta.id = 'q-answer';
+    ta.placeholder = 'Напиши ответ своими словами…';
+    ta.value = S.q.text;
+    S.q.keydown = 0;
+    S.q.pasted = false;
+    ta.addEventListener('keydown', () => { S.q.keydown += 1; });
+    ta.addEventListener('paste', (e) => {
+      e.preventDefault();
+      warnInline(body, 'Вставка не работает — напечатай ответ сам. Так честнее.');
+    });
+    ta.addEventListener('drop', (e) => e.preventDefault());
+    ta.addEventListener('dragover', (e) => e.preventDefault());
+    const count = el('div', 'q-count', 'Напечатано символов с клавиатуры: 0');
+    ta.addEventListener('input', () => {
+      count.textContent = `Напечатано символов с клавиатуры: ${S.q.keydown}`;
+    });
+    body.append(ta, count);
+    const actions = el('div', 'q-actions');
+    const done = el('button', 'btn btn-primary btn-big', 'Готово');
+    done.id = 'q-done';
+    done.onclick = () => submitAnswer(ta, done);
+    actions.append(done);
+    body.append(actions);
+    ta.focus();
+    return;
+  }
+
+  // mode === 'verdict'
+  const v = S.q.verdict;
+  const card = el('div', 'verdict ' + (v.mark === 2 ? 'ok' : v.mark === 1 ? 'mid' : 'bad'));
+  if (v.mark === 2) {
+    card.append(el('p', 'verdict-title', 'Всё верно!'));
+    if (v.explanation) card.append(el('p', 'verdict-explain', v.explanation));
+  } else if (v.mark === 1) {
+    card.append(el('p', 'verdict-title', v.llmDead ? 'Нейронка отдыхает' : 'В целом правильно, но можно кое-что учесть:'));
+    if (v.explanation) card.append(el('p', 'verdict-explain', v.explanation));
+  } else {
+    card.append(el('p', 'verdict-title', 'Пока не получилось. Подумай ещё'));
+    if (v.explanation) card.append(el('p', 'verdict-explain', v.explanation));
+  }
+  body.append(card);
+
+  const actions = el('div', 'q-actions');
+  if (v.llmDead) {
+    const later = el('button', 'btn btn-primary btn-big', 'Попробовать позже');
+    later.id = 'q-later';
+    later.onclick = () => openLevels();
+    actions.append(later);
+  } else if (v.mark >= 1) {
+    const next = el('button', 'btn btn-primary btn-big', 'Дальше');
+    next.id = 'q-next';
+    next.onclick = () => goNext();
+    actions.append(next);
+    if (v.mark === 1) {
+      const more = el('button', 'btn-link', 'Хочу дополнить');
+      more.id = 'q-amend';
+      more.onclick = () => { S.q.mode = 'answer'; renderQuestion(); };
+      actions.append(more);
+    }
+  } else {
+    // mark 0: возвращаем в режим ответа (прежний текст сохранён в S.q.text).
+    const retry = el('button', 'btn btn-primary btn-big', 'Переписать ответ');
+    retry.id = 'q-retry';
+    retry.onclick = () => { S.q.mode = 'answer'; renderQuestion(); };
+    actions.append(retry);
+  }
+  body.append(actions);
+}
+
+function warnInline(body, msg) {
+  let w = body.querySelector('.error');
+  if (!w) { w = el('div', 'error'); body.append(w); }
+  w.textContent = msg;
+  w.classList.remove('hidden');
+  clearTimeout(warnInline._t);
+  warnInline._t = setTimeout(() => w.classList.add('hidden'), 5000);
+}
+
+async function submitAnswer(ta, btn) {
+  const text = ta.value.trim();
+  if (!text) { ta.focus(); return; }
+  const body = $('#question-body');
+  if (S.q.pasted || (text.length > 40 && S.q.keydown < text.length * 0.9)) {
+    warnInline(body, 'Похоже, ответ вставлен, а не напечатан. Перепиши своими руками — так честнее.');
+  }
   btn.disabled = true;
   try {
-    stopReading();
-    await api('attempt-answers', { id: S.attempt.id, answers });
-    await runReview();
+    await api('attempt-answers', {
+      id: S.attempt.id,
+      answer: { qid: S.q.qid, text, keydown: S.q.keydown, pasted: !!S.q.pasted, t_answer: Date.now() },
+    });
+    S.q.text = text;
+    const r = await api('review-question', { id: S.attempt.id, qid: S.q.qid });
+    S.marks[S.q.qid] = { mark: r.mark, explanation: r.explanation || '' };
+    if (r.mark >= 1) {
+      S.q.verdict = { mark: r.mark, explanation: r.explanation || '' };
+      S.q.mode = 'verdict';
+      renderQuestion();
+    } else if ((r.attempts_on_qid || 0) >= 2) {
+      // Вторая подряд неудача — подключаем сократовский диалог.
+      await startSocratic();
+    } else {
+      S.q.verdict = { mark: 0, explanation: r.explanation || '' };
+      S.q.mode = 'verdict';
+      renderQuestion();
+    }
   } catch (ex) {
-    notify(ex.message);
+    if (ex.code === 'llm_limit') {
+      // Нейронка на сегодня закрыта: проверить не можем. Решение (см. отчёт task-15):
+      // mark не подделываем, вперёд не пускаем — ребёнок уходит на выбор задания
+      // кнопкой «Попробовать позже», попытка ждёт (ответ уже сохранён на сервере).
+      S.q.verdict = { mark: 1, llmDead: true, explanation: 'Вопросов к нейронке на сегодня хватит — напиши ответ как получится, взрослый всё увидит. Ответ сохранён, проверить его можно будет позже.' };
+      S.q.mode = 'verdict';
+      renderQuestion();
+    } else if (ex.code === 'suspicious') {
+      S.q.keydown = 0;
+      warnInline(body, ex.message);
+    } else {
+      notify(ex.message);
+    }
   } finally {
     btn.disabled = false;
   }
 }
 
-// ---------- Экран 4: результат ----------
-async function runReview() {
-  const r = await api('review', { id: S.attempt.id });
-  S.marks = r.marks || {};
-  S.resultStatus = r.status || 'reflection';
-  S.zeroQids = r.zero_qids || [];
-  S.reviewedQids = r.reviewed_qids || S.questions.map(q => q.qid);
-  renderResult();
-  show('result');
-}
-
-function renderResult() {
-  stopReading();
-  const wrap = $('#result-cards');
-  wrap.innerHTML = '';
-  const qById = {};
-  for (const q of S.questions) qById[q.qid] = q;
-  const shown = S.reviewedQids.length ? S.reviewedQids : S.questions.map(q => q.qid);
-  for (const qid of shown) {
-    const q = qById[qid];
-    if (!q) continue;
-    const m = (S.marks && S.marks[qid]) || { mark: 0, explanation: '' };
-    const card = el('div', 'result-card ' + (m.mark === 2 ? 'ok' : m.mark === 1 ? 'mid' : 'bad'));
-    const head = el('div', 'result-head');
-    const markEl = el('span', 'result-mark', m.mark === 2 ? '✅ Зачтено' : m.mark === 1 ? '➕ Почти' : '❌ Не зачтено');
-    head.append(markEl, el('span', 'q-text', q.text.length > 90 ? q.text.slice(0, 90) + '…' : q.text));
-    card.append(head);
-    if (m.explanation) card.append(el('div', 'result-explain', m.explanation));
-    if (m.mark === 0) card.append(renderSocraticBox(qid));
-    wrap.append(card);
-  }
-  renderResultActions();
-}
-
-function renderResultActions() {
-  const wrap = $('#result-actions');
-  wrap.innerHTML = '';
-  const remaining = S.zeroQids.filter(qid => !S.socratic[qid] || !S.socratic[qid].rewritten);
-  if (S.resultStatus === 'socratic') {
-    if (remaining.length) {
-      wrap.append(el('p', 'pane-hint', 'Разбери вопросы с ❌ через «Давай подумаем» и перепиши ответы — потом проверим снова.'));
+// ---------- Сократовский диалог ----------
+async function startSocratic() {
+  try {
+    const r = await api('socratic-ask', { id: S.attempt.id, qid: S.q.qid });
+    S.q.mode = 'socratic';
+    S.q.socratic = { question: r.question, step: r.step || 1, history: [] };
+    renderQuestion();
+  } catch (ex) {
+    if (ex.code === 'socratic_limit' || ex.code === 'llm_limit') {
+      notify(ex.message);
+      S.q.verdict = { mark: 0, explanation: 'Подсказки закончились — теперь перепиши ответ сам, как понимаешь.' };
+      S.q.mode = 'verdict';
+      renderQuestion();
     } else {
-      const btn = el('button', 'btn btn-primary btn-big', 'Проверить снова');
-      btn.onclick = async () => {
-        btn.disabled = true;
-        try { await runReview(); } catch (ex) { notify(ex.message); btn.disabled = false; }
-      };
-      wrap.append(btn);
+      notify(ex.message);
+      S.q.verdict = { mark: 0, explanation: '' };
+      S.q.mode = 'verdict';
+      renderQuestion();
     }
-    const next = el('button', 'btn btn-teal', 'Или: ещё один шаг подсказки (лестница)');
-    next.onclick = async () => {
-      next.disabled = true;
-      try {
-        const r = await api('next', { id: S.attempt.id });
-        if (r.attempt) {
-          await loadAttempt(r.attempt.id);
-        } else {
-          alert(`Шаг лестницы сделан (итерация ${r.iterations}). Можешь проверить ответы снова.`);
-          renderResultActions();
-        }
-      } catch (ex) { notify(ex.message); }
-      next.disabled = false;
-    };
-    wrap.append(next);
-  } else if (S.resultStatus === 'reflection') {
-    const btn = el('button', 'btn btn-primary btn-big', 'Дальше: три вопроса о прочитанном');
-    btn.onclick = () => { renderReflection(); show('reflection'); };
-    wrap.append(btn);
   }
 }
 
-function renderSocraticBox(qid) {
-  const box = el('div', 'socratic-box');
-  const state = S.socratic[qid] || (S.socratic[qid] = { answers: [] });
-
-  if (!state.question) {
-    const btn = el('button', 'btn btn-teal', 'Давай подумаем');
-    btn.onclick = async () => {
-      btn.disabled = true;
-      try {
-        const r = await api('socratic-ask', { id: S.attempt.id, qid });
-        state.question = r.question;
-        state.step = r.step;
-        rerender();
-      } catch (ex) { notify(ex.message); btn.disabled = false; }
-    };
-    box.append(btn);
-  } else {
-    box.append(el('div', 'socratic-q', state.question));
-    const ta = el('textarea', 'input');
-    ta.placeholder = 'Напиши тут, что думаешь…';
-    box.append(ta);
-    const row = el('div', 'q-actions');
-    const send = el('button', 'btn btn-teal', 'Ответить');
-    send.onclick = async () => {
-      const text = ta.value.trim();
-      if (!text) return;
-      send.disabled = true;
-      try {
-        await api('socratic-answer', { id: S.attempt.id, qid, text });
-        state.answers.push({ step: state.step, text });
-        ta.value = '';
-        rerender();
-      } catch (ex) { notify(ex.message); send.disabled = false; }
-    };
-    row.append(send);
-    if (!state.rewritten) {
-      const rewrite = el('button', 'btn btn-primary', 'Переписать ответ');
-      rewrite.onclick = () => {
-        const rw = el('textarea', 'input');
-        rw.placeholder = 'Новый ответ на вопрос — своими словами, целиком…';
-        let kd = 0;
-        rw.addEventListener('keydown', () => { kd += 1; });
-        const save = el('button', 'btn btn-primary', 'Сохранить новый ответ');
-        save.onclick = async () => {
-          const text = rw.value.trim();
-          if (!text) return;
-          save.disabled = true;
-          try {
-            await api('attempt-answers', {
-              id: S.attempt.id,
-              answers: [{ qid, text, keydown: kd, pasted: false, t_answer: Date.now() }],
-            });
-            state.rewritten = true;
-            rerender();
-          } catch (ex) { notify(ex.message); save.disabled = false; }
-        };
-        box.append(rw, save);
-        rewrite.disabled = true;
-      };
-      row.append(rewrite);
+function renderSocratic(body, q) {
+  const soc = S.q.socratic;
+  const kick = el('p', 'kicker', 'Давай подумаем вместе');
+  body.append(kick);
+  if (soc.history.length) {
+    const hist = el('div', 'socratic-history');
+    for (const h of soc.history) {
+      const pq = el('p');
+      pq.append(el('span', 'who', 'Вопрос'));
+      pq.append(document.createTextNode(h.q));
+      const pa = el('p');
+      pa.append(el('span', 'who', 'Ты'));
+      pa.append(document.createTextNode(h.a));
+      hist.append(pq, pa);
     }
-    box.append(row);
-    if (state.answers.length) {
-      const hist = el('div', 'socratic-history');
-      state.answers.forEach((a, i) => hist.append(el('div', null, `Шаг ${a.step}: ${a.text}`)));
-      box.append(hist);
+    body.append(hist);
+  }
+  body.append(el('p', 'socratic-q', soc.question));
+  const ta = el('textarea', 'input');
+  ta.id = 'socratic-answer';
+  ta.placeholder = 'Напиши, что думаешь…';
+  body.append(ta);
+  const actions = el('div', 'q-actions');
+  const send = el('button', 'btn btn-primary btn-big', 'Ответить');
+  send.id = 'socratic-send';
+  send.onclick = async () => {
+    const text = ta.value.trim();
+    if (!text) { ta.focus(); return; }
+    send.disabled = true;
+    try {
+      await api('socratic-answer', { id: S.attempt.id, qid: S.q.qid, text });
+      soc.history.push({ q: soc.question, a: text });
+      try {
+        const r = await api('socratic-ask', { id: S.attempt.id, qid: S.q.qid });
+        soc.question = r.question;
+        soc.step = r.step || soc.step + 1;
+        renderQuestion();
+      } catch (ex2) {
+        if (ex2.code === 'socratic_limit' || ex2.code === 'llm_limit') {
+          // Шаги кончились — возвращаемся к основному вопросу.
+          notify('Подсказки закончились — теперь напиши ответ на вопрос сам.');
+          S.q.mode = 'answer';
+          renderQuestion();
+        } else {
+          notify(ex2.message);
+          renderQuestion();
+        }
+      }
+    } catch (ex) {
+      notify(ex.message);
+      send.disabled = false;
     }
-    if (state.rewritten) box.append(el('div', 'socratic-history', 'Новый ответ сохранён.'));
-  }
+  };
+  actions.append(send);
+  const back = el('button', 'btn-link', 'Хватит подсказок — вернуться к ответу');
+  back.id = 'socratic-back';
+  back.onclick = () => { S.q.mode = 'answer'; renderQuestion(); };
+  actions.append(back);
+  body.append(actions);
+  ta.focus();
+}
 
-  function rerender() {
-    const fresh = renderSocraticBox(qid);
-    box.replaceWith(fresh);
-    renderResultActions();
+// ---------- Переход дальше ----------
+function goNext() {
+  const nextIdx = S.q.idx + 1;
+  if (nextIdx < S.questions.length) {
+    startQuestion(nextIdx);
+    return;
   }
-  return box;
+  // Вопросы кончились — рефлексия.
+  renderReflection();
+  show('reflection');
 }
 
 // ---------- Экран 5: рефлексия ----------
 function renderReflection() {
+  stopReading();
   const wrap = $('#reflection-list');
   wrap.innerHTML = '';
   $('#reflection-warning').classList.add('hidden');
   for (const q of REFLECTION_QUESTIONS) {
-    const card = el('div', 'q-card refl-card');
+    const card = el('div', 'refl-card');
     card.append(el('p', 'q-text', q.text));
     const ta = el('textarea', 'input');
     ta.dataset.rqid = q.qid;
@@ -598,7 +646,7 @@ async function submitReflection() {
   for (const q of REFLECTION_QUESTIONS) {
     const ta = document.querySelector(`textarea[data-rqid="${q.qid}"]`);
     const text = ta.value.trim();
-    if (text.length < 2) { alert('Ответь на все три вопроса — хоть парой слов.'); ta.focus(); return; }
+    if (text.length < 2) { notify('Ответь на все три вопроса — хоть парой слов.'); ta.focus(); return; }
     answers.push(text);
   }
   const btn = $('#reflection-submit');
@@ -613,7 +661,7 @@ async function submitReflection() {
         const m = r.marks && r.marks[qid];
         if (m && m.explanation) {
           const ta = document.querySelector(`textarea[data-rqid="${qid}"]`);
-          const note = el('div', 'result-explain', 'Проверяльщик: ' + m.explanation);
+          const note = el('div', 'verdict-explain', 'Проверяльщик: ' + m.explanation);
           ta.parentNode.append(note);
         }
       }
@@ -639,8 +687,8 @@ async function doApprove() {
 function launchConfetti() {
   const wrap = $('#confetti');
   wrap.innerHTML = '';
-  const colors = ['#2f7cf6', '#14b8a6', '#7c5cf0', '#f5a623', '#ef4b5e'];
-  for (let i = 0; i < 80; i++) {
+  const colors = ['#0a0a0a', '#8a8a8a', '#1e8e5a', '#b33951', '#c9a227'];
+  for (let i = 0; i < 70; i++) {
     const p = document.createElement('i');
     p.style.left = Math.random() * 100 + '%';
     p.style.background = colors[i % colors.length];
@@ -681,7 +729,7 @@ async function openCabinet() {
       meta.append(el('div', 'cab-meta', `${STATUS_NAMES[a.status] || a.status} · ${fmtDate(a.updated_at)}`));
       item.append(meta);
       if (lv && lv.full_source_url && a.status === 'approved') {
-        const link = el('a', 'btn btn-ghost', 'Прочитать целиком');
+        const link = el('a', 'btn btn-outline', 'Прочитать целиком');
         link.href = lv.full_source_url;
         link.target = '_blank';
         link.rel = 'noopener';
@@ -696,7 +744,6 @@ async function openCabinet() {
 }
 
 // ---------- Инициализация ----------
-// Единый баннер сообщений (task-12): вместо alert() — полоска сверху, сама прячется.
 let bannerTimer = null;
 function notify(msg) {
   let b = $('#app-banner');
@@ -712,7 +759,6 @@ function notify(msg) {
   bannerTimer = setTimeout(() => b.classList.add('hidden'), 6000);
 }
 
-// 401 из api(): токен протух — чистим сессию и показываем вход с пояснением.
 function sessionExpired() {
   stopReading();
   localStorage.removeItem(TOKEN_KEY);
@@ -732,9 +778,11 @@ function logout() {
 
 function init() {
   initAuth();
-  $('#reader-tab-text').onclick = () => setReaderTab('text');
-  $('#reader-tab-questions').onclick = () => setReaderTab('questions');
-  $('#answers-submit').onclick = submitAnswers;
+  $('#reader-done').onclick = () => {
+    stopReading();
+    const idx = firstUnpassedIdx();
+    startQuestion(idx === -1 ? 0 : idx);
+  };
   $('#reflection-submit').onclick = submitReflection;
   $('#approve-to-cabinet').onclick = openCabinet;
   $('#nav-levels').onclick = openLevels;

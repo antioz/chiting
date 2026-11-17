@@ -4,15 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Читинг — читаем по-настоящему</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Cormorant+Garamond:ital,wght@1,300;1,400&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header id="topbar" class="topbar hidden">
   <div class="topbar-logo">Читинг</div>
   <nav class="topbar-nav">
-    <button id="nav-levels" class="btn btn-ghost">Задания</button>
-    <button id="nav-cabinet" class="btn btn-ghost">Кабинет</button>
-    <button id="nav-logout" class="btn btn-ghost">Выйти</button>
+    <button id="nav-levels" class="navlink">Задания</button>
+    <button id="nav-cabinet" class="navlink">Кабинет</button>
+    <button id="nav-logout" class="navlink">Выйти</button>
   </nav>
 </header>
 
@@ -21,7 +24,8 @@
   <!-- 1. Вход / регистрация -->
   <section id="screen-auth" class="screen">
     <div class="card auth-card">
-      <h1 class="title">Читинг</h1>
+      <p class="kicker">Читинг</p>
+      <h1 class="display">Читаем<br>по-настоящему</h1>
       <p class="subtitle">Читаем текст по правилу и зарабатываем настоящие деньги.</p>
       <div class="tabs">
         <button id="auth-tab-login" class="tab active">Вход</button>
@@ -48,43 +52,35 @@
 
   <!-- 2. Выбор задания -->
   <section id="screen-levels" class="screen hidden">
-    <h1 class="title">Выбери задание</h1>
+    <p class="kicker">Задания</p>
+    <h1 class="display">Выбери задание</h1>
     <p class="subtitle">Поставь ставку — сколько денег хочешь заработать за честный ответ.</p>
     <div id="levels-list" class="levels-list"></div>
   </section>
 
-  <!-- 3. Читалка -->
+  <!-- 3. Читалка: только текст и одна кнопка -->
   <section id="screen-reader" class="screen hidden">
-    <div class="reader-head">
-      <h1 class="title" id="reader-title">Текст</h1>
-      <div class="tabs">
-        <button id="reader-tab-text" class="tab active">Текст</button>
-        <button id="reader-tab-questions" class="tab">Вопросы</button>
-      </div>
-    </div>
+    <p class="kicker" id="reader-kicker">Текст</p>
+    <h1 class="display" id="reader-title">Текст</h1>
     <div id="reader-rule" class="rule-plate"></div>
-    <div id="reader-text-pane" class="reader-pane">
-      <div id="reader-text" class="reader-text"></div>
-      <p class="reader-note">Прочитай внимательно. Таймер чтения уже идёт — это нормально, торопиться не надо.</p>
-    </div>
-    <div id="reader-questions-pane" class="reader-pane hidden">
-      <p class="pane-hint">Отвечай своими словами. Копипаст не сработает — а мы всё увидим.</p>
-      <div id="reader-questions"></div>
-      <div id="answers-warning" class="error hidden"></div>
-      <button id="answers-submit" class="btn btn-primary btn-big">Отправить ответы</button>
-    </div>
+    <div id="reader-text" class="reader-text"></div>
+    <p class="reader-note">Прочитай внимательно, не торопись. Когда будешь готов — нажми кнопку внизу.</p>
+    <button id="reader-done" class="btn btn-primary btn-big">Прочитал — к вопросам</button>
   </section>
 
-  <!-- 4. Результат -->
-  <section id="screen-result" class="screen hidden">
-    <h1 class="title">Результат</h1>
-    <div id="result-cards"></div>
-    <div id="result-actions" class="result-actions"></div>
+  <!-- 4. Вопрос по шагам: один вопрос, одна кнопка -->
+  <section id="screen-question" class="screen hidden">
+    <div class="q-progress">
+      <div class="q-progress-label" id="q-progress-label">Вопрос 1 из 5</div>
+      <div class="q-progress-bar"><i id="q-progress-fill"></i></div>
+    </div>
+    <div id="question-body"></div>
   </section>
 
   <!-- 5. Рефлексия -->
   <section id="screen-reflection" class="screen hidden">
-    <h1 class="title">Пара слов напоследок</h1>
+    <p class="kicker">Рефлексия</p>
+    <h1 class="display">Пара слов напоследок</h1>
     <p class="subtitle">Три коротких вопроса — честно, как думаешь.</p>
     <div id="reflection-list"></div>
     <div id="reflection-warning" class="error hidden"></div>
@@ -95,7 +91,8 @@
   <section id="screen-approve" class="screen hidden">
     <div id="confetti" class="confetti"></div>
     <div class="card approve-card">
-      <h1 class="title">Задание засчитано!</h1>
+      <p class="kicker">Зачёт</p>
+      <h1 class="display">Задание засчитано!</h1>
       <p class="subtitle">Купон на деньги — покажи его взрослому.</p>
       <div class="coupon">
         <div class="coupon-amount" id="coupon-amount"></div>
@@ -108,7 +105,8 @@
 
   <!-- 7. Кабинет -->
   <section id="screen-cabinet" class="screen hidden">
-    <h1 class="title">Кабинет</h1>
+    <p class="kicker">Кабинет</p>
+    <h1 class="display">Кабинет</h1>
     <h2 class="h2">Купоны</h2>
     <div id="cabinet-coupons"></div>
     <h2 class="h2">Мои попытки</h2>
