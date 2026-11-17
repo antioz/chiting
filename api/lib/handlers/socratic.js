@@ -8,6 +8,7 @@ const C = require('../config');
 const prompts = require('../prompts');
 const rubric = require('../rubric');
 let llm = require('../llm');       // seam для тестов: setLlm(mockFn)
+const llmShared = require('../llm'); // isRefusal — общий детектор отказа (вне seam)
 let repo = require('../repo');     // seam для тестов: _setRepo(mock)
 
 const CRITERIA_NAMES = ['Соответствие форме задания', 'Точность (пересказ не подменяет смысл)', 'Привязка к тексту', 'Свои слова (нет копии слов автора)', 'Осмысленность'];
@@ -47,15 +48,12 @@ function leaksEtalon(question, etalon) {
 // Плохой сократовский вопрос: (а) в тексте НЕТ знака «?»; (б) в тексте есть
 // маркеры отказа/перевода темы (модель отказалась от беседы, а не задала
 // вопрос). Такая генерация отклоняется — как утечка эталона (регенерация).
-// «прости(те)» проверяем как отдельное слово, чтобы «простил» не ловился.
-const REFUSAL_MARKERS = ['не могу', 'не можем', 'извините', 'другую тему', 'внешн', 'политик', 'неприемлем'];
+// Маркеры — общий детектор llm.isRefusal.
 function isBadSocraticQuestion(q) {
   const text = String(q || '').toLowerCase();
   if (!text) return true;
   if (!text.includes('?')) return true;
-  if (REFUSAL_MARKERS.some(m => text.includes(m))) return true;
-  if (/давай(те)?\s+поговорим/.test(text)) return true;
-  if (/(^|[^\p{L}\p{N}])прости(те)?([^\p{L}\p{N}]|$)/u.test(text)) return true;
+  if (llmShared.isRefusal(q)) return true;
   return false;
 }
 

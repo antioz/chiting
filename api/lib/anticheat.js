@@ -16,3 +16,16 @@ function isSuspiciousSingle(a) {
   return false;
 }
 module.exports = { typedRatio, isSuspicious, isSuspiciousSingle };
+
+// Детерминированный стоп-лист грубостей (task-17): ответ с матом — mark 0 без вызова
+// ЛЛМ в review-question (и принудительный 0 в reflect). Закрывает класс «мусор с
+// грубостью» независимо от настроения модели: раньше модель могла дать 1 «по теме,
+// но с неприемлемым выражением». Подстроки покрывают склонения; «хуже/хуево» НЕ ловим
+// (корень 'хуе' без слово-границ создаёт ложные срабатывания на бытовых словах).
+const PROFANITY = ['нахер', 'нахуй', 'нахуя', 'пизд', 'бляд', 'блять', 'бляц', 'ебан', 'ебат', 'еблан', 'заеб', 'выеб', 'пидор', 'пидр', 'шлюх', 'залуп', 'дроч', 'мудак', 'мудил', 'гандон', 'сука', 'суки', 'сучк', 'хуй', 'хуя'];
+function hasProfanity(text) {
+  const s = String(text || '').toLowerCase();
+  if (!s) return false;
+  return PROFANITY.some(w => s.includes(w));
+}
+module.exports.hasProfanity = hasProfanity;

@@ -100,15 +100,50 @@ test('reflect: не reflection-статус → 409; чужой attempt → 404;
   assert.strictEqual((await finish.reflect({ user: USER, id: 'a1', answers: ['а', 'б'] })).status, 400);
 });
 
-test('reflect: не-JSON от ЛЛМ → 502 llm_parse, записей reflection_answers нет', async () => {
+test('reflect: не-JSON от ЛЛМ → degraded: все mark 0 + нейтральный текст, записи reflection_answers есть, 502 нет', async () => {
   const state = makeState();
   finish._setRepo(makeRepo(state));
   finish.setLlm(mockLlm('Просто текст'));
   const res = await finish.reflect({ user: USER, id: 'a1', answers: ANSWERS });
-  assert.strictEqual(res.status, 502);
-  assert.deepStrictEqual(res.body, { error: 'llm_parse' });
-  assert.strictEqual(state.calls.reflections.length, 0);
+  assert.strictEqual(res.status, undefined);
+  assert.strictEqual(res.body.degraded, true);
+  assert.deepStrictEqual(res.body.retry_qids, RQ.map(q => q.qid));
+  for (const q of RQ) {
+    assert.strictEqual(res.body.marks[q.qid].mark, 0);
+    assert.strictEqual(res.body.marks[q.qid].explanation, 'Напиши, пожалуйста, свой ответ: что ты думаешь по этому вопросу, своими словами.');
+  }
+  assert.strictEqual(state.calls.reflections.length, RQ.length, 'degraded-ответы перезаписаны');
+  assert.ok(state.calls.reflections.every(([, r]) => r.mark === 0));
   assert.strictEqual(state.calls.statuses.length, 0);
+  const reflectEvent = state.calls.events.filter(e => e[2] === 'reflect').pop();
+  assert.strictEqual(reflectEvent[3].degraded, true);
+});
+
+test('reflect: отказ модели → degraded, explanation не содержит эха грубостей', async () => {
+  const state = makeState();
+  finish._setRepo(makeRepo(state));
+  finish.setLlm(mockLlm('Я не могу обсуждать такие темы. Простите, давайте поговорим о другой теме.'));
+  const res = await finish.reflect({ user: USER, id: 'a1', answers: ['блядь нахер это', 'ывапролдж', 'согласен'] });
+  assert.strictEqual(res.body.degraded, true);
+  assert.deepStrictEqual(res.body.retry_qids, RQ.map(q => q.qid));
+  for (const q of RQ) {
+    assert.ok(!/блядь|нахер|не могу|простите/i.test(res.body.marks[q.qid].explanation), 'explanation — только каноничный текст');
+  }
+});
+
+test('reflect: мат в одном ответе → детерминированный 0 с каноничным текстом, остальные по модели', async () => {
+  const state = makeState();
+  finish._setRepo(makeRepo(state));
+  finish.setLlm(mockLlm(LLM_OK)); // модель ставит 2 везде
+  const res = await finish.reflect({ user: USER, id: 'a1', answers: [ANSWERS[0], 'не буду я писать, нахер', ANSWERS[2]] });
+  assert.strictEqual(res.body.marks[RQ[0].qid].mark, 2, 'чистый ответ — по оценке модели');
+  assert.strictEqual(res.body.marks[RQ[1].qid].mark, 0);
+  assert.strictEqual(res.body.marks[RQ[1].qid].explanation, 'Напиши, пожалуйста, свой ответ: что ты думаешь по этому вопросу, своими словами.');
+  assert.strictEqual(res.body.marks[RQ[2].qid].mark, 2);
+  assert.deepStrictEqual(res.body.retry_qids, [RQ[1].qid]);
+  const r2 = state.calls.reflections.find(([, r]) => r.qid === RQ[1].qid)[1];
+  assert.strictEqual(r2.mark, 0);
+  assert.ok(!/нахер/i.test(r2.explanation), 'explanation без эха грубости');
 });
 
 test('approve: без завершённой рефлексии → 409', async () => {

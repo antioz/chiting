@@ -240,20 +240,68 @@ test('review-question: нет текущего ответа на qid → 409 no_
   assert.strictEqual(r3.status, 409);
 });
 
-test('review-question: не-JSON даже после ретрая → 502 llm_parse, две записи llm_reviews', async () => {
-  const { repo, calls } = makeRepo();
+test('review-question: не-JSON даже после ретрая → degraded mark 0 + каноничный текст, две записи llm_reviews', async () => {
+  const { repo, calls, state } = makeRepo();
   review._setRepo(repo);
   review.setLlm(mockLlm('Просто текст без JSON'));
   const res = await review.question({ user: USER, id: 'a1', qid: 'q1' });
   teardown();
-  assert.strictEqual(res.status, 502);
-  assert.deepStrictEqual(res.body, { error: 'llm_parse' });
+  assert.strictEqual(res.status, undefined);
+  assert.strictEqual(res.body.qid, 'q1');
+  assert.strictEqual(res.body.mark, 0);
+  assert.strictEqual(res.body.explanation, 'Такой ответ не подойдёт — напиши о том, что есть в тексте, своими словами.');
+  assert.strictEqual(res.body.degraded, true);
+  assert.strictEqual(res.body.attempts_on_qid, 1);
   assert.strictEqual(llmCalls, 2, 'ровно один ретрай');
   assert.strictEqual(calls.reviews.length, 2);
   assert.strictEqual(calls.reviews[1][0].scope, 'question_retry');
+  const marks = JSON.parse(state.attempt.marks_json);
+  assert.strictEqual(marks.q1.mark, 0);
+  assert.strictEqual(state.attempt.status, 'answering');
+  const qReview = state.events.filter(e => e.type === 'q_review').pop();
+  assert.deepStrictEqual(qReview.payload, { qid: 'q1', mark: 0, degraded: true });
+});
+
+test('review-question: отказ модели («не могу обсуждать…») → degraded mark 0, explanation без эха грубостей', async () => {
+  const { repo, state } = makeRepo();
+  review._setRepo(repo);
+  review.setLlm(mockLlm('Извините, но я не могу обсуждать эту тему. Давайте поговорим о чём-нибудь другом.'));
+  const res = await review.question({ user: USER, id: 'a1', qid: 'q1' });
+  teardown();
+  assert.strictEqual(res.status, undefined);
+  assert.strictEqual(res.body.mark, 0);
+  assert.strictEqual(res.body.degraded, true);
+  assert.strictEqual(res.body.explanation, 'Такой ответ не подойдёт — напиши о том, что есть в тексте, своими словами.');
+  assert.ok(!/нахер|не могу|извините/i.test(res.body.explanation), 'explanation — только каноничный текст');
+  const qReview = state.events.filter(e => e.type === 'q_review').pop();
+  assert.strictEqual(qReview.payload.degraded, true);
 });
 
 // split-режим: только qid фрагмента + whole — остальные qid → 404
+test('review-question: мат в ответе → детерминированный mark 0 без вызова ЛЛМ, profanity:true', async () => {
+  const { repo, state } = makeRepo({
+    getAnswers: async () => [
+      { qid: 'q1', text_raw: 'нахер, не буду это писать' },
+      { qid: 'q2', text_raw: 'ответ на q2' },
+      { qid: 'q3', text_raw: 'ответ на q3' },
+    ],
+  });
+  review._setRepo(repo);
+  review.setLlm(mockLlm(LLM_MARK2));
+  const res = await review.question({ user: USER, id: 'a1', qid: 'q1' });
+  teardown();
+  assert.strictEqual(res.status, undefined);
+  assert.strictEqual(res.body.mark, 0);
+  assert.strictEqual(res.body.profanity, true);
+  assert.strictEqual(res.body.explanation, 'Такой ответ не подойдёт — напиши о том, что есть в тексте, своими словами.');
+  assert.ok(!/нахер/i.test(res.body.explanation), 'explanation без эха грубости');
+  assert.strictEqual(llmCalls, 0, 'ЛЛМ не вызывается');
+  const marks = JSON.parse(state.attempt.marks_json);
+  assert.strictEqual(marks.q1.mark, 0);
+  const qReview = state.events.filter(e => e.type === 'q_review').pop();
+  assert.deepStrictEqual(qReview.payload, { qid: 'q1', mark: 0, profanity: true });
+});
+
 test('review-question: split-attempt — qid из чужого фрагмента → 404, in_scope считается по фрагменту + whole', async () => {
   const QREF = [
     { qid: 'q1', type: 'T2', fragment_ref: 'whole', text: 'Сожми текст' },

@@ -7,7 +7,9 @@ const crypto = require('crypto');
 const C = require('../config');
 const prompts = require('../prompts');
 const rubric = require('../rubric');
+const anticheat = require('../anticheat');
 let llm = require('../llm');       // seam для тестов: setLlm(mockFn)
+const llmShared = require('../llm'); // каноничные тексты degraded (вне seam)
 let repo = require('../repo');     // seam для тестов: _setRepo(mock)
 
 // 8-значный код без неоднозначных символов (0/O, 1/I/L исключены) — читается с экрана/бумаги.
@@ -43,25 +45,31 @@ async function reflect({ user, id, answers }) {
   });
 
   const results = rubric.parseLlmReflectionResults(out.text);
-  if (!results) {
-    await repo.addEvent(user.id, id, 'reflect', { error: 'llm_parse' }, Date.now());
-    return { status: 502, body: { error: 'llm_parse' } };
-  }
+  // Отказ модели / непарс — НЕ 502: все вопросы mark 0 с нейтральным каноничным
+  // текстом + retry_qids. Explanation — только заготовленный текст (без эха
+  // грубостей ребёнка и без текста самой модели).
+  const degraded = !results;
 
-  // Вопрос, пропущенный ЛЛМ, — ноль (как в review.pack).
+  // Вопрос, пропущенный ЛЛМ, — ноль (как в review.pack); при degraded — ноль у всех.
+  // Грубость в ответе ребёнка — детерминированный 0 с каноничным текстом (task-17),
+  // даже если модель оценила иначе (или отказалась — тогда degraded выше).
   const marks = {};
   const retryQids = [];
   for (const p of pairs) {
-    const r = results.find(x => x.qid === p.qid);
-    const mark = r ? r.mark : 0;
-    const explanation = r ? r.explanation : 'ЛЛМ не вернула оценку по вопросу';
+    const r = results ? results.find(x => x.qid === p.qid) : null;
+    const profane = anticheat.hasProfanity(p.answer);
+    const mark = profane ? 0 : (r ? r.mark : 0);
+    const explanation = profane ? llmShared.DEGRADED_REFLECTION_EXPLANATION : (r ? r.explanation : llmShared.DEGRADED_REFLECTION_EXPLANATION);
     marks[p.qid] = { mark, explanation };
     await repo.addReflectionAnswer(id, { qid: p.qid, question_text: p.text, answer_text: p.answer, mark, explanation });
     if (mark === 0) retryQids.push(p.qid);
   }
-  await repo.addEvent(user.id, id, 'reflect', { marks, retry_qids: retryQids }, Date.now());
+  const eventPayload = { marks, retry_qids: retryQids };
+  if (degraded) eventPayload.degraded = true;
+  await repo.addEvent(user.id, id, 'reflect', eventPayload, Date.now());
   const body = { marks };
   if (retryQids.length) body.retry_qids = retryQids;
+  if (degraded) body.degraded = true;
   return { body };
 }
 

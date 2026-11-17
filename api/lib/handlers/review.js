@@ -4,7 +4,9 @@
 const C = require('../config');
 const prompts = require('../prompts');
 const rubric = require('../rubric');
+const anticheat = require('../anticheat');
 let llm = require('../llm');       // seam для тестов: setLlm(mockFn)
+const llmShared = require('../llm'); // isRefusal + каноничные тексты degraded (вне seam)
 let repo = require('../repo');     // seam для тестов: _setRepo(mock) (паттерн из attempts)
 
 // body_json — Json: массив абзацев/фрагментов (seed-content). Плоский текст для промпта.
@@ -134,6 +136,20 @@ async function question({ user, id, qid }) {
   const cur = answers.find(a => a.qid === qid);
   if (!cur || !String(cur.text_raw || '').trim()) return { status: 409, body: { error: 'no_answer' } };
 
+  // Детерминированный стоп-лист (task-17): мат в ответе ребёнка — mark 0 БЕЗ вызова
+  // ЛЛМ. Модель «по теме, но с грубостью» могла ставить 1 — класс «мусор с грубостью»
+  // закрывается детерминированно, explanation — только каноничный текст.
+  if (anticheat.hasProfanity(cur.text_raw)) {
+    const explanation = llmShared.DEGRADED_QUESTION_EXPLANATION;
+    const marks = safeParse(attempt.marks_json, {});
+    marks[qid] = { mark: 0, total: 0, explanation };
+    await repo.updateAttemptMarks(id, { status: attempt.status, marks_json: marks, updated_at: Date.now() });
+    await repo.addEvent(user.id, id, 'q_zero', { qid, profanity: true }, Date.now());
+    const attemptsOnQid = await repo.countConsecutiveQZero(id, qid);
+    await repo.addEvent(user.id, id, 'q_review', { qid, mark: 0, profanity: true }, Date.now());
+    return { body: { qid, mark: 0, explanation, attempts_on_qid: attemptsOnQid, profanity: true } };
+  }
+
   const [text, bases] = await Promise.all([repo.getText(level.text_id), repo.answerBases(attempt.level_id)]);
   const base = bases.find(b => b.level_qid === `${attempt.level_id}:${qid}`);
   const textBody = ov ? ov.text : flattenBody(text && text.body_json);
@@ -167,8 +183,18 @@ async function question({ user, id, qid }) {
       tokens_in: out.tokensIn, tokens_out: out.tokensOut, cost_rub: out.costRub, t_spent: tStart,
     });
     if (!parsed) {
-      await repo.addEvent(user.id, id, 'q_review', { qid, error: 'llm_parse' }, Date.now());
-      return { status: 502, body: { error: 'llm_parse' } };
+      // Отказ модели / непарс после retry — НЕ 502: degraded mark 0 с каноничным текстом.
+      // Explanation — только заготовленный текст (без эха грубостей ребёнка и без
+      // текста самой модели). События q_zero + q_review {degraded:true} — по обычной
+      // семантике mark 0 (серия неудач на qid продолжается).
+      const explanation = llmShared.DEGRADED_QUESTION_EXPLANATION;
+      const marks = safeParse(attempt.marks_json, {});
+      marks[qid] = { mark: 0, total: 0, explanation };
+      await repo.updateAttemptMarks(id, { status: attempt.status, marks_json: marks, updated_at: Date.now() });
+      await repo.addEvent(user.id, id, 'q_zero', { qid, degraded: true }, Date.now());
+      const attemptsOnQid = await repo.countConsecutiveQZero(id, qid);
+      await repo.addEvent(user.id, id, 'q_review', { qid, mark: 0, degraded: true }, Date.now());
+      return { body: { qid, mark: 0, explanation, attempts_on_qid: attemptsOnQid, degraded: true } };
     }
   }
 
