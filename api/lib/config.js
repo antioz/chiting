@@ -5,7 +5,7 @@ module.exports = {
   yandexGptKey: process.env.YANDEX_GPT_API_KEY,
   yandexGptFolder: process.env.YANDEX_GPT_FOLDER_ID,
   yandexGptModel: process.env.YANDEX_GPT_MODEL || 'yandexgpt-lite',
-  llmCallsLimit: Number(process.env.LLM_CALLS_LIMIT || 16),
+  llmCallsLimit: Number(process.env.LLM_CALLS_LIMIT || 30),
   splitThreshold: Number(process.env.SPLIT_THRESHOLD || 4),
   socraticMaxSteps: Number(process.env.SOCRATIC_MAX_STEPS || 4),
   rubricVersion: 'v3-2026-11-15',

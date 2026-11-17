@@ -86,8 +86,8 @@ test('pack: ноль по q2 → status answering (socratic больше не с
   assert.strictEqual(res.body.marks.q2.total, 0);
 });
 
-test('pack: лимит 16 вызовов → 429 llm_limit, ЛЛМ не вызывается', async () => {
-  const { repo } = makeRepo({ countLlmReviews: async () => 16 });
+test('pack: лимит 30 вызовов → 429 llm_limit, ЛЛМ не вызывается', async () => {
+  const { repo } = makeRepo({ countLlmReviews: async () => 30 });
   review._setRepo(repo);
   let called = 0;
   review.setLlm(async () => { called++; return { text: '' }; });
@@ -199,7 +199,7 @@ test('reflect: countLlmReviews=16 → 429 llm_limit, ЛЛМ не вызывае�
   const finish = require('../lib/handlers/finish');
   const repo = {
     getAttempt: async () => ({ id: 'a1', user_id: 'u1', level_id: 'lvl1', status: 'reflection' }),
-    countLlmReviews: async () => 16,
+    countLlmReviews: async () => 30,
     addLlmReview: async () => { throw new Error('не должен писать'); },
   };
   finish._setRepo(repo);

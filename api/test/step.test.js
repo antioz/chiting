@@ -1,7 +1,7 @@
 // Пошаговый флоу (task-14): review-question — один вопрос, один вызов ЛЛМ, marks_json
 // накапливается; mark=0 → событие q_zero, attempts_on_qid = подряд идущие нули;
 // все in_scope qid с mark>=1 → status='reflection'; сократ разрешён в answering по нулевому qid;
-// лимит llmCallsLimit=16 → 429. Моки repo/LLM по паттерну review.test.js.
+// лимит llmCallsLimit=30 → 429. Моки repo/LLM по паттерну review.test.js.
 const test = require('node:test');
 const assert = require('node:assert');
 const review = require('../lib/handlers/review');
@@ -209,9 +209,9 @@ test('review-question: mark>=1 по всем in_scope qid → status reflection'
   teardown();
 });
 
-// (е) лимит 16 → 429 llm_limit, ЛЛМ не вызывается
-test('review-question: лимит 16 вызовов → 429 llm_limit, ЛЛМ не вызывается', async () => {
-  const { repo } = makeRepo({ countLlmReviews: async () => 16 });
+// (е) лимит 30 → 429 llm_limit, ЛЛМ не вызывается
+test('review-question: лимит 30 вызовов → 429 llm_limit, ЛЛМ не вызывается', async () => {
+  const { repo } = makeRepo({ countLlmReviews: async () => 30 });
   review._setRepo(repo);
   let called = 0;
   review.setLlm(async () => { called++; return { text: '' }; });
